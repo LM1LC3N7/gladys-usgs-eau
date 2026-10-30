@@ -1,177 +1,134 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "USGS Water Data",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Unofficial. U.S. rivers and wells: discharge, level and temperature (USGS).",
+    "fr": "Non officiel. Rivières et nappes des États-Unis : débit, niveau, température (USGS)."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-usgs-eau:0.1.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-usgs-eau/main/cover.png",
+  "categories": ["environment"],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": { "en": "U.S. rivers and groundwater", "fr": "Rivières et nappes des États-Unis" },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Open data of the U.S. Geological Survey (Water Data APIs), public domain, no account, no key. Unofficial integration, not affiliated with the USGS; not a warning system: follow the National Weather Service for floods. For each station you choose: discharge, gage height, water temperature and depth to groundwater, as the station measures them (most values are provisional). A value older than the maximum age is never published. After saving and the first read, open the Discovery tab and create the stations: one device per station.",
+        "fr": "Données ouvertes de l'Institut d'études géologiques des États-Unis (USGS, API Water Data), domaine public, sans compte ni clé. Intégration non officielle, sans lien avec l'USGS ; pas un système d'alerte : pour les crues, suivez le National Weather Service. Pour chaque station choisie : débit, hauteur à l'échelle, température de l'eau et profondeur de la nappe, selon ce que la station mesure (valeurs le plus souvent provisoires). Une valeur plus ancienne que l'ancienneté maximale n'est jamais publiée. Après l'enregistrement et la première lecture, ouvrez l'onglet Découverte et créez les stations : un appareil par station."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://waterdata.usgs.gov/",
+          "label": { "en": "USGS Water Data map", "fr": "Carte Water Data de l'USGS" }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-usgs-eau/blob/main/docs/en.md",
+          "label": { "en": "Guide (English)", "fr": "Guide (anglais)" }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-usgs-eau/blob/main/docs/fr.md",
+          "label": { "en": "Guide (French)", "fr": "Guide (français)" }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
+      "key": "stations",
+      "type": "string",
+      "label": { "en": "Stations", "fr": "Stations" },
       "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+        "en": "USGS station numbers (8 to 15 digits), separated by commas or spaces, 20 at most. Another agency: its id, such as AR008-343826091361301. The \"Search stations\" button finds the numbers.",
+        "fr": "Numéros de stations USGS (8 à 15 chiffres), séparés par des virgules ou des espaces, 20 au plus. Autre agence : son identifiant, par exemple AR008-343826091361301. Le bouton « Chercher des stations » trouve les numéros."
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
-    },
-    {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
-    },
-    {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "placeholder": { "en": "01646500, 09380000", "fr": "01646500, 09380000" },
       "required": false,
-      "default": "celsius",
+      "default": ""
+    },
+    {
+      "key": "units",
+      "type": "select",
+      "label": { "en": "Units", "fr": "Unités" },
+      "description": {
+        "en": "U.S. units (ft³/s, ft, °F, as the USGS gives them) or metric (m³/s, m, °C, converted exactly). A device keeps the units it was created with; to change them, delete it and create it again from Discovery.",
+        "fr": "Unités américaines (pi³/s, pieds, °F, telles que l'USGS les donne) ou métriques (m³/s, m, °C, converties exactement). Un appareil garde les unités de sa création ; pour en changer, supprimez-le puis recréez-le depuis la Découverte."
+      },
+      "required": false,
+      "default": "us",
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "us",
+          "label": { "en": "U.S. (ft³/s, ft, °F)", "fr": "Américaines (pi³/s, pieds, °F)" }
+        },
+        {
+          "value": "metric",
+          "label": { "en": "Metric (m³/s, m, °C)", "fr": "Métriques (m³/s, m, °C)" }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "key": "language",
+      "type": "select",
+      "label": { "en": "Language of the texts", "fr": "Langue des textes" },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "Language of the feature names given in Discovery and of the status texts. The station names come from the USGS, in English.",
+        "fr": "Langue des noms de fonctions proposés dans la Découverte et des textes d'état. Les noms des stations viennent de l'USGS, en anglais."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": "en",
+      "options": [
+        { "value": "en", "label": { "en": "English", "fr": "Anglais" } },
+        { "value": "fr", "label": { "en": "French", "fr": "Français" } }
+      ]
+    },
+    {
+      "key": "interval_minutes",
+      "type": "number",
+      "label": { "en": "Read every (minutes)", "fr": "Lecture toutes les (minutes)" },
+      "description": {
+        "en": "Time between two reads, from 15 to 120 minutes. All the stations are read in one request. Most stations measure every 15 minutes and send their data every hour.",
+        "fr": "Temps entre deux lectures, de 15 à 120 minutes. Toutes les stations sont lues en une requête. La plupart des stations mesurent toutes les 15 minutes et envoient leurs données toutes les heures."
+      },
+      "required": false,
+      "default": 15,
+      "min": 15,
+      "max": 120
+    },
+    {
+      "key": "max_age_hours",
+      "type": "number",
+      "label": { "en": "Maximum age (hours)", "fr": "Ancienneté maximale (heures)" },
+      "description": {
+        "en": "A measurement older than this is not current: never published, the status says so. From 1 to 48 hours; raise it for a well that sends once a day.",
+        "fr": "Une mesure plus ancienne n'est pas récente : jamais publiée, l'état le dit. De 1 à 48 heures ; augmentez-le pour un puits qui n'envoie qu'une fois par jour."
+      },
+      "required": false,
+      "default": 3,
+      "min": 1,
+      "max": 48
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
-    }
-  ],
-  "scene_triggers": [
-    {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "search_stations",
+      "timeout_seconds": 60,
+      "label": { "en": "Search stations", "fr": "Chercher des stations" },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "Finds the stations whose name holds every word typed (river, town, state abbreviation), with their numbers. One request to the USGS.",
+        "fr": "Trouve les stations dont le nom contient chaque mot tapé (rivière, ville, abréviation de l'État), avec leurs numéros. Une requête à l'USGS."
       },
       "fields": [
         {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
-        }
-      ],
-      "variables": [
-        {
-          "key": "target",
+          "key": "query",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
-        }
-      ]
-    }
-  ],
-  "scene_actions": [
-    {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
-      },
-      "timeout_seconds": 15,
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
+          "label": { "en": "Words of the name", "fr": "Mots du nom" },
+          "placeholder": { "en": "e.g. Potomac DC", "fr": "ex. Potomac DC" },
           "required": true
         }
-      ],
-      "outputs": [
-        {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
-        }
       ]
-    }
-  ],
-  "widgets": [
-    {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
-      },
-      "icon": "activity",
-      "action_timeout_seconds": 15
     }
   ]
 }

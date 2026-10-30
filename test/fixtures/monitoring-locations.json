@@ -1,0 +1,111 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_name": "SAN MARCIAL ADDED",
+        "site_type": "Stream",
+        "state_name": "New Mexico",
+        "time_zone_abbreviation": "MST",
+        "uses_daylight_savings": "Y"
+      },
+      "id": "USGS-00000000",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_name": "POTOMAC RIVER NEAR WASH, DC LITTLE FALLS PUMP STA",
+        "site_type": "Stream",
+        "state_name": "Maryland",
+        "time_zone_abbreviation": "EST",
+        "uses_daylight_savings": "Y"
+      },
+      "id": "USGS-01646500",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_name": "COLORADO RIVER AT LEES FERRY, AZ",
+        "site_type": "Stream",
+        "state_name": "Arizona",
+        "time_zone_abbreviation": "MST",
+        "uses_daylight_savings": "N"
+      },
+      "id": "USGS-09380000",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_name": "GREEN RIVER NEAR AUBURN, WA",
+        "site_type": "Stream",
+        "state_name": "Washington",
+        "time_zone_abbreviation": "PST",
+        "uses_daylight_savings": "Y"
+      },
+      "id": "USGS-12113000",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_name": "WK-436 CROWDER PARK NR HOLLY SPRINGS NC REGOLITH",
+        "site_type": "Well",
+        "state_name": "North Carolina",
+        "time_zone_abbreviation": "EST",
+        "uses_daylight_savings": "Y"
+      },
+      "id": "USGS-354144078460101",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_name": "10N 22W 8BCBB1-Site7-20",
+        "site_type": "Well",
+        "state_name": "Nebraska",
+        "time_zone_abbreviation": "CST",
+        "uses_daylight_savings": "Y"
+      },
+      "id": "USGS-405118099514901",
+      "geometry": null
+    }
+  ],
+  "numberReturned": 6,
+  "links": [
+    {
+      "type": "application/geo+json",
+      "rel": "self",
+      "title": "This document as GeoJSON",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=json&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
+    },
+    {
+      "rel": "alternate",
+      "type": "application/ld+json",
+      "title": "This document as RDF (JSON-LD)",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=jsonld&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
+    },
+    {
+      "type": "text/html",
+      "rel": "alternate",
+      "title": "This document as HTML",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=html&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
+    },
+    {
+      "type": "text/csv; charset=utf-8",
+      "rel": "alternate",
+      "title": "This document as CSV",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=csv&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
+    },
+    {
+      "type": "application/json",
+      "title": "Monitoring locations",
+      "rel": "collection",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations"
+    }
+  ],
+  "timeStamp": "2026-10-30T06:05:39.609430Z"
+}

@@ -1,67 +1,160 @@
-# Template de démonstration
+# USGS Water Data
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+Intégration non officielle, sans lien avec l'Institut d'études géologiques des
+États-Unis (USGS). Elle lit les **dernières valeurs des stations de mesure de
+l'USGS** que vous choisissez, aux États-Unis, depuis les nouvelles API Water
+Data de l'USGS (`api.waterdata.usgs.gov`, domaine public) : sans compte ni clé.
+Lecture seule : rien n'est jamais envoyé à l'USGS que des requêtes GET.
+
+Essayée contre la vraie API Water Data de l'USGS le 30 octobre 2026 (six
+stations : rivières, un puits à sec, un puits de nappe) ; jamais testée avec une
+vraie installation Gladys pour l'instant : dites-nous ce que vous voyez.
+
+Ce **n'est pas un système d'alerte**. La plupart des valeurs sont
+**provisoires** (l'USGS peut les corriger), mesurées toutes les 15 minutes et
+envoyées environ toutes les heures. Pour les crues, suivez le National Weather
+Service et les autorités locales.
+
+## Mise en route
+
+1. Trouvez les numéros des stations : le bouton **Chercher des stations** de la
+   configuration (mots du nom, par exemple `potomac dc`), ou la carte
+   <https://waterdata.usgs.gov/>.
+2. Saisissez-les dans **Stations** (8 à 15 chiffres, séparés par des virgules
+   ou des espaces, 20 au plus). Une station d'une autre agence : son
+   identifiant complet, par exemple `AR008-343826091361301`.
+3. Choisissez les unités, la langue des textes, l'intervalle de lecture (15 à
+   120 minutes, 15 par défaut) et l'ancienneté maximale (1 à 48 heures, 3 par
+   défaut), puis enregistrez.
+4. Après la première lecture, ouvrez l'onglet **Découverte** : un appareil par
+   station, avec les fonctions de ce que la station a mesuré récemment. Créez
+   ceux que vous voulez.
 
 ## Ce que vous obtenez
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+| Fonction                           | Unités américaines | Unités métriques | Paramètre USGS |
+| ---------------------------------- | ------------------ | ---------------- | -------------- |
+| Débit                              | pi³/s              | m³/s             | 00060          |
+| Hauteur à l'échelle                | pieds              | m                | 00065          |
+| Température de l'eau               | °F                 | °C               | 00010          |
+| Profondeur de la nappe sous le sol | pieds              | m                | 72019          |
+| État                               | texte              | texte            |                |
 
-## Configuration
+- Une fonction n'est proposée qu'une fois que la station en a donné une valeur
+  récente.
+- Les conversions sont exactes (1 pied = 0,3048 m, 1 pi³/s =
+  0,028316846592 m³/s, °F = °C × 9/5 + 32), puis arrondies (0,001 pour les
+  pieds, les pi³/s et les mètres, 0,0001 pour les m³/s, 0,01 pour les degrés).
+- L'unité fait partie de la fonction : un appareil garde les unités de sa
+  création, même si le formulaire les change. Pour changer d'unités,
+  supprimez l'appareil et recréez-le depuis la Découverte (l'historique de
+  l'ancienne fonction part avec elle).
+- Gladys n'a pas d'unité de débit : le débit est un nombre simple, son unité
+  dans son nom.
+- L'**État** donne l'heure de la mesure dans le fuseau de la station (donné par
+  l'USGS : « Mesuré le 30 oct., 01:50 UTC−4 »), les mesures qui ne sont plus à
+  jour, ou pourquoi il n'y a pas de valeur : « Sans valeur (à sec) », « Sans
+  valeur (glace) », « Valeur illisible à la source », « Aucune valeur récente ;
+  dernière le … », « Aucune donnée en continu à cette station », « Station
+  inconnue de l'USGS ».
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+## Fraîcheur
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+- Chaque mesure est publiée **une seule fois** (dédoublonnée sur son heure,
+  gardée dans /data), sans date de création : une scène « hauteur au-dessus de
+  X » se déclenche sur une nouvelle mesure, pas à chaque lecture.
+- Une mesure plus ancienne que l'**ancienneté maximale** du formulaire n'est
+  pas récente : elle n'est pas publiée, l'état dit quand elle a été mesurée.
+  L'âge est compté depuis l'en-tête `Date` de la réponse de l'USGS (depuis notre
+  horloge quand cet en-tête manque ou s'en écarte de plus d'un jour), plus le
+  temps écoulé depuis la lecture.
+- Une valeur datée de plus de 15 minutes dans le futur, une valeur qui n'est
+  pas un nombre simple (un texte, une valeur vide), hors de la plage plausible
+  de sa mesure (par exemple un « -999999 ») ou dans une unité inconnue est
+  illisible : jamais publiée.
+- Une station qui ne donne pas de valeur (l'USGS n'en envoie pas, avec une
+  raison comme `DRY`, `ICE`, `EQUIPMENT`) ne reçoit jamais de 0 : l'état donne la
+  raison.
+- Une station avec plusieurs séries d'une même mesure (deux capteurs, une série
+  arrêtée en 2019) : parmi les séries récentes, celle du plus petit identifiant
+  (la même d'une lecture à l'autre tant qu'elle reste récente).
+- Gladys garde la dernière valeur publiée : quand une valeur n'est plus
+  récente, l'**État** le dit ; la valeur affichée garde sa propre date dans
+  Gladys.
+- Les textes d'état suivent les âges à chaque lecture, et à chaque intervalle
+  pendant une longue pause.
 
-## Actions
+## Seuils de crue et scènes
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+L'API de l'USGS ne donne pas de seuil de crue (les catégories de crue sont
+celles du National Weather Service). Utilisez les seuils connus pour votre
+rivière dans une scène : le déclencheur **Changement d'état d'un appareil** sur
+la hauteur ou le débit, avec la condition « supérieur à X ». Il se déclenche à
+la première mesure récente au-dessus de X.
 
-## Scènes
+## Rythme et requêtes
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+- **Une requête pour toutes les stations** à chaque lecture
+  (`latest-continuous`), suivie de 2 pages de plus au plus si la réponse en
+  annonce (jamais une autre adresse), puis, une fois par semaine, une requête
+  pour les noms et fuseaux des stations (`monitoring-locations`). Une requête
+  à la fois, bouton de recherche compris.
+- Une lecture par intervalle, quoi qui la demande : enregistrer le formulaire
+  inchangé, une reconnexion, l'onglet Découverte, un appareil créé ou un
+  redémarrage ne lisent rien plus tôt (l'heure de la lecture est écrite dans
+  /data avant la requête). Exceptions :
+  - le premier démarrage (pas encore de fichier /data) lit tout de suite ;
+  - une **nouvelle liste de stations** est lue une minute après la dernière
+    lecture au plus tôt ;
+  - une lecture coupée avant ses valeurs (formulaire enregistré, reconnexion)
+    est refaite une minute après elle ;
+  - quand /data ne peut pas être lu, ou contient une date invalide ou dans le
+    futur, la première lecture vient un intervalle après le démarrage ;
+  - un intervalle raccourci dans le formulaire rapproche la lecture suivante
+    (le nouvel intervalle après la dernière lecture).
+- Chaque requête est bornée : 20 secondes, 2 Mo pour une page de valeurs,
+  512 Ko pour les noms ou une recherche.
+- User-Agent : `gladys-usgs-eau/<version> (+adresse du dépôt)` ; `Accept`
+  `application/geo+json`. L'USGS répond `no-cache` sans ETag ni Last-Modified :
+  pas de requête conditionnelle.
+- **429** (trop de requêtes) : toutes les requêtes à l'USGS sont mises en pause,
+  5 minutes doublées à chaque nouvelle, `Retry-After` respecté, entre 60
+  secondes et 6 heures, gardée après un redémarrage ; la lecture suivante vient
+  à la fin de la pause, pas un tour plus tard. Un **5xx** des valeurs met les
+  lectures en pause de la même façon ; un 5xx des noms ou d'une recherche ne
+  met rien en pause.
+- Un échec des noms et fuseaux n'arrête jamais les valeurs (un 429 est la
+  limite du service entier : il met toutes les requêtes en pause, comme plus
+  haut) : le numéro de la station sert alors de nom, les heures sont en UTC,
+  ils sont redemandés une heure plus tard.
+- Gladys accepte 300 états par minute : le module en envoie 250 au plus sur
+  une minute glissante ; au-delà, le reste passe en premier à la lecture
+  suivante, à tour de rôle.
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+## Chercher des stations
 
-## Tableau de bord
+Le bouton demande à l'USGS les stations dont le nom contient chaque mot tapé
+(lettres et chiffres seulement, 2 à 30 caractères, 4 mots au plus) et en liste
+15 avec le numéro à copier. Une recherche toutes les 10 secondes au plus,
+aucune pendant une pause ; une recherche qui attend plus de 45 secondes
+derrière une lecture abandonne.
 
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+## État de l'intégration
 
-## Dépannage
+« Connecté » seulement quand la dernière lecture a réussi **et** qu'au moins une
+station a une valeur récente. Sinon le message dit pourquoi : l'USGS répond
+mais aucune station n'a de valeur récente, la dernière lecture a échoué
+(réseau, pas de réponse à temps, refus, réponse trop grande, incomplète ou
+inattendue), en pause jusqu'à une heure (UTC) ; et aussi des stations saisies
+qui ne sont pas des numéros, une valeur du formulaire remplacée, des stations
+inconnues de l'USGS, les noms non lus, /data illisible (mis de côté sous un
+autre nom) ou non inscriptible, des valeurs reportées à la lecture suivante.
+Avant la première lecture : « En attente de la première lecture ».
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+## Données et licence
+
+- Données de l'USGS, dans le domaine public. La plupart des valeurs en temps
+  réel sont provisoires.
+- Aucune donnée personnelle n'est lue ni gardée. /data garde l'heure de la
+  dernière lecture, la pause, les noms, fuseaux et mesures des stations, et
+  l'heure de la dernière mesure publiée par fonction.
