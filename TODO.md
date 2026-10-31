@@ -135,6 +135,13 @@
   implied by `usable === 0`, an unreachable `aborted` branch, a re-arm in
   `failed()` already done by the wake-up, a length check before an anchored
   regex).
+- Review r2: tests for R2-9 (provisional unless "Approved"), R2-12
+  (approval_status asked), R2-22 (the reason of a late kind), R2-13 (AST =
+  Puerto Rico), R2-33 (the shutdown runs app.stop); the status says
+  "provisional" first and the codes per kind (m1, m2), shorter words ("late",
+  "equipment fault") so that 120 characters hold them; a detached `sh`
+  SIGKILLs the process 3 s after the 15 s deadline when the exit itself hangs
+  (m3); a device created while dry has only Status until Update (m4, docs).
 - Real-clock tests: ×20 for the period (two reads, 15 min = 45 s); ×60 for the
   read at the end of a 20 min pause (20 s), so that each fits in the 60 s test
   timeout.

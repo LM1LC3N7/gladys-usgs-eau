@@ -65,7 +65,7 @@ const QUALIFIERS = new Map([
   ['DIFFDATUM', { en: 'other datum', fr: 'autre référence de niveau' }],
   ['DISCONTINUED', { en: 'discontinued', fr: 'arrêtée' }],
   ['DRY', { en: 'dry', fr: 'à sec' }],
-  ['EQUIP', { en: 'equipment malfunction', fr: "panne d'équipement" }],
+  ['EQUIP', { en: 'equipment fault', fr: 'panne' }],
   ['ESTIMATED', { en: 'estimated', fr: 'estimée' }],
   ['FLOOD', { en: 'flood damage', fr: 'dégâts de crue' }],
   ['FORCEINTERPOLATION', { en: 'interpolated', fr: 'interpolée' }],
@@ -136,16 +136,27 @@ export function deviceStatus(language, view) {
         : KIND_NAMES[lang][kind],
     )
     .join(', ');
-  // What the USGS says of the values published: estimated, revised... and provisional.
-  const notes = (view.flags ?? []).map((code) => qualifierText(lang, [code]));
-  if (view.provisional) notes.push(fr ? 'provisoire' : 'provisional');
-  const flags = notes.length > 0 ? ` (${notes.join(', ')})` : '';
+  // What the USGS says of the values published, first (the bound never cuts it):
+  // "provisional" (or the kinds that are, when not all), then the codes per kind.
+  const name = (kind) => KIND_NAMES[lang][kind];
+  const prov = view.provisional ?? [];
+  const word = fr ? 'provisoire' : 'provisional';
+  let flags = '';
+  if (prov.length > 0) {
+    flags +=
+      prov.length === (view.published ?? []).length
+        ? `, ${word}`
+        : `, ${word}${fr ? ' : ' : ': '}${prov.map(name).join(', ')}`;
+  }
+  for (const { kind, codes } of view.flags ?? []) {
+    flags += `${fr ? ' ; ' : '; '}${name(kind)}${fr ? ' : ' : ': '}${qualifierText(lang, codes)}`;
+  }
   switch (view.code) {
     case 'ok':
       return bound(
         fr
-          ? `Mesuré le ${t}${flags}${kinds ? ` ; pas à jour : ${kinds}` : ''}`
-          : `Measured ${t}${flags}${kinds ? `; not current: ${kinds}` : ''}`,
+          ? `Mesuré le ${t}${flags}${kinds ? ` ; en retard : ${kinds}` : ''}`
+          : `Measured ${t}${flags}${kinds ? `; late: ${kinds}` : ''}`,
       );
     case 'novalue':
       return bound(

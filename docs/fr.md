@@ -44,7 +44,10 @@ Service et les autorités locales.
   récente. Une mesure qui apparaît plus tard (un puits qui n'est plus à sec,
   une échelle après la glace) s'ajoute à l'appareil depuis l'onglet
   Découverte : son bouton **Mettre à jour** donne la nouvelle fonction à
-  l'appareil, en gardant les autres et leur historique.
+  l'appareil, en gardant les autres et leur historique. Un appareil créé
+  pendant que sa station est à sec, gelée ou hors service n'a donc que sa
+  fonction **État** jusqu'à ce que vous cliquiez sur **Mettre à jour** une
+  fois la valeur revenue.
 - Le paramètre 30208 est le débit en m³/s que quelques stations publient à la
   place (ou à côté) du 00060 ; il remplit la même fonction. Non lus : le débit
   mesuré 00061 (aucune série en continu sur le service le 30 octobre 2026) et
@@ -61,7 +64,11 @@ Service et les autorités locales.
   dans son nom.
 - L'**État** donne l'heure de la mesure dans le fuseau de la station
   (« Mesuré le 30 oct., 01:50 UTC−4 »), ce que l'USGS dit des valeurs publiées
-  (« (estimée, provisoire) »), les mesures qui ne sont plus à jour, ou pourquoi
+  d'abord « provisoire » (ou les mesures qui le sont, si pas toutes), puis
+  chaque mesure avec ses codes (« Mesuré le 30 oct., 01:50 UTC−4, provisoire ;
+  débit : estimée »), les mesures en retard avec leur raison (« en retard :
+  température (panne) » ; le texte est coupé à 120 caractères, par la fin), ou
+  pourquoi
   il n'y a pas de valeur : « Sans valeur (à sec) », « Sans valeur (glace) »,
   « Sans valeur (sous le minimum mesurable) », « Valeur illisible à la
   source », « Aucune valeur récente ; dernière le … », « Aucune donnée en

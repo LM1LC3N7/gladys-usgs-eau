@@ -42,7 +42,9 @@ floods, follow the National Weather Service and your local authorities.
 - A feature is offered only once the station gave a current value of it. A
   kind that shows up later (a well no longer dry, a gauge after the ice) is
   added to the device in the Discovery tab: its **Update** button gives the
-  device the new feature, keeping the others and their history.
+  device the new feature, keeping the others and their history. So a device
+  created while its station is dry, iced or out of service has only its
+  **Status** feature until you click **Update** once the value is back.
 - Parameter 30208 is the discharge in m³/s that a few stations publish instead
   of (or beside) 00060; it fills the same feature. Not read: the measured
   discharge 00061 (no continuous series on the service on 30 October 2026) and
@@ -58,7 +60,11 @@ floods, follow the National Weather Service and your local authorities.
   its name.
 - The **Status** gives the time of the measurement in the time zone of the
   station ("Measured Oct 30, 1:50 AM EDT"), what the USGS says of the values
-  published ("(estimated, provisional)"), the kinds no longer current, or why
+  published, first "provisional" (or the kinds that are, when not all), then
+  each kind with its codes ("Measured Oct 30, 1:50 AM EDT, provisional;
+  discharge: estimated"), the kinds late with their reason ("late:
+  temperature (equipment fault)"; the text is cut at 120 characters, from the
+  end), or why
   there is no value: "No value (dry)", "No value (ice)", "No value (below the
   minimum measurable)", "Unreadable value at the source", "No current value;
   last one …", "No continuous data at this station", "Station unknown to the

@@ -484,3 +484,29 @@ test('bounds: 8 qualifiers, 200 locations, series ids of safe characters', () =>
   };
   assert.equal(parseLocations(JSON.stringify(odd)).locations.size, 0);
 });
+
+test('provisional unless approval_status says Approved (absent, null, another case, unknown)', () => {
+  const at = AT;
+  const one = (approval) => {
+    const f = series({ at });
+    if (approval === 'absent') delete f.properties.approval_status;
+    else f.properties.approval_status = approval;
+    return parseLatest(JSON.stringify(latestBody([f])), new Set(['USGS-01646500'])).series[0];
+  };
+  for (const value of ['absent', null, 'approved', 'Whatever', 'Provisional', 3]) {
+    assert.equal(one(value).provisional, true, String(value));
+  }
+  assert.equal(one('Approved').provisional, false);
+});
+
+test('approval_status is asked for (properties of the request)', () => {
+  const url = new URL(latestUrl(BASE, ['USGS-01646500']));
+  assert.ok(url.searchParams.get('properties').split(',').includes('approval_status'));
+  assert.ok(url.searchParams.get('properties').split(',').includes('qualifier'));
+});
+
+test('Puerto Rico and the Virgin Islands (AST): no daylight saving whatever the flag', () => {
+  assert.equal(zoneOf('AST', 'Y'), 'America/Puerto_Rico');
+  assert.equal(zoneOf('AST', 'N'), 'America/Puerto_Rico');
+  assert.equal(zoneOf('HST', 'Y'), 'Pacific/Honolulu');
+});

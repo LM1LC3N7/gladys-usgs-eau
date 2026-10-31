@@ -108,6 +108,8 @@ export const SEARCH_SHOWN = 15;
 export const SAVE_WAIT = 5 * SECOND;
 /** After a stop signal, the process exits this long after it at the latest. */
 export const SHUTDOWN_LIMIT = 15 * SECOND;
+/** Then, if the exit itself hangs, a SIGKILL this long after (from outside the process). */
+export const SHUTDOWN_KILL_DELAY = 3 * SECOND;
 /** A clean stop waits this long, at most, for the read running. */
 export const STOP_WAIT = 3 * SECOND;
 /** Dates of the last values published kept in /data, at most. */

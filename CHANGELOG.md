@@ -31,3 +31,6 @@ the notes of the version's GitHub Release.
   daylight saving whatever the flag of the USGS (Florida), American Samoa;
   any Retry-After capped at 6 h; a 5xx pause said as such; the process exits
   15 s after a stop signal at the latest.
+- Review r2: the status says "provisional" first, then the codes of each kind
+  ("discharge: estimated") and the kinds late with their reason; a last-resort
+  SIGKILL from outside the process 3 s after the shutdown deadline.

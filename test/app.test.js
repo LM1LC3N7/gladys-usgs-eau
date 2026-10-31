@@ -96,7 +96,7 @@ test('real captures: one request, Discovery with names and the kinds seen, value
   assert.deepEqual(values(POTOMAC, 'gage-height-ft'), [2.91]);
   // 15.9 °C = 60.62 °F exactly; the 2019 series of the station are never shown.
   assert.deepEqual(values(POTOMAC, 'water-temperature-f'), [60.62]);
-  assert.deepEqual(texts(POTOMAC), ['Measured Oct 30, 6:50 AM EDT (provisional)']);
+  assert.deepEqual(texts(POTOMAC), ['Measured Oct 30, 6:50 AM EDT, provisional']);
   assert.deepEqual(texts(DRY), ['No value (dry), Oct 30, 6:45 AM EDT']);
   assert.deepEqual(values(WELL, 'groundwater-depth-ft'), [8.54]);
   // DRY 0.00 ft³/s: never a 0; BLWMIN 7620 ft³/s for a gage of 0.12 ft: never published.
@@ -116,7 +116,9 @@ test('real captures: one request, Discovery with names and the kinds seen, value
   assert.deepEqual(texts(BLWMIN), ['No value (below the minimum measurable), Oct 30, 6:00 AM CDT']);
   // ESTIMATED 0.89 ft³/s: published, the status says it.
   assert.deepEqual(values(ESTIMATED, 'discharge-cfs'), [0.89]);
-  assert.deepEqual(texts(ESTIMATED), ['Measured Oct 30, 4:45 AM MDT (estimated, provisional)']);
+  assert.deepEqual(texts(ESTIMATED), [
+    'Measured Oct 30, 4:45 AM MDT, provisional; discharge: estimated',
+  ]);
   // Port Huron: EST "without daylight saving" for the USGS, EDT in fact.
   assert.match(texts('USGS-04159130')[0], /^Measured Oct 30, 7:00 AM EDT/);
   for (const s of t.gladys.fake.states) assert.equal(s.created_at, undefined);
@@ -152,7 +154,7 @@ test('metric units: exact conversions; °C as the USGS gives it', async () => {
   // Lees Ferry, Arizona: no daylight saving (MST all year).
   assert.deepEqual(
     t.statesOf(F('USGS-09380000', 'status')).map((s) => s.text),
-    ['Mesuré le 30 oct., 04:00 UTC−7 (provisoire)'],
+    ['Mesuré le 30 oct., 04:00 UTC−7, provisoire'],
   );
   const device = t.gladys.fake.discoveredDevices.find((d) => d.external_id === D(POTOMAC));
   assert.deepEqual(
@@ -245,7 +247,7 @@ test('a value without number (dry, ice, a text, empty) is never published, never
   const text = (id) => t.statesOf(F(id, 'status')).map((s) => s.text);
   assert.deepEqual(text('USGS-09380000'), ['Unreadable value at the source']);
   assert.deepEqual(text('USGS-12113000'), ['Unreadable value at the source']);
-  assert.deepEqual(text(WELL), ['No value (equipment malfunction), Oct 30, 11:40 AM UTC']);
+  assert.deepEqual(text(WELL), ['No value (equipment fault), Oct 30, 11:40 AM UTC']);
   assert.equal(t.status().connected, true);
   await t.app.stop();
 });
@@ -537,7 +539,7 @@ test('the status of a station lists the kinds no longer current', async () => {
   await t.app.idle();
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
-    ['Mesuré le 30 oct., 11:44 UTC', 'Mesuré le 30 oct., 11:59 UTC ; pas à jour : hauteur'],
+    ['Mesuré le 30 oct., 11:44 UTC', 'Mesuré le 30 oct., 11:59 UTC ; en retard : hauteur'],
   );
   await t.app.stop();
 });
@@ -839,7 +841,7 @@ test('a qualifier sent as a plain string is read; nuancing codes are said, inval
   assert.deepEqual(t.statesOf(F(POTOMAC, 'gage-height-ft')), []);
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
-    ['Mesuré le 30 oct., 11:44 UTC (estimée, révisée, provisoire)'],
+    ['Mesuré le 30 oct., 11:44 UTC, provisoire : débit ; débit : estimée ; température : révisée'],
   );
   await t.app.stop();
 });
@@ -870,10 +872,61 @@ test('a dry well with a number: never a depth of water', async () => {
   );
   assert.deepEqual(
     t.statesOf(F('USGS-354144078460101', 'status')).map((s) => s.text),
+    ['Measured Oct 30, 11:44 AM UTC', 'No value (dry, equipment fault), Oct 30, 11:59 AM UTC'],
+  );
+  await t.app.stop();
+});
+
+test('the status names the kind not current with its reason, the kind estimated, the kinds provisional', async () => {
+  const t = await setup({ config: { stations: '01646500' }, world: {} });
+  let temperature = { value: '10', qualifier: null };
+  t.source.world.latest = () =>
+    latestBody([
+      series({ at: t.clock.now() - MINUTE, approval: 'Provisional' }),
+      series({ param: '00065', at: t.clock.now() - MINUTE, value: '2', qualifier: ['ESTIMATED'] }),
+      series({ param: '00010', at: t.clock.now() - MINUTE, ...temperature }),
+    ]);
+  await t.begin();
+  await t.create(POTOMAC);
+  temperature = { value: null, qualifier: ['EQUIP'] };
+  await t.wait(15 * MINUTE);
+  await t.app.idle();
+  assert.deepEqual(
+    t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
     [
-      'Measured Oct 30, 11:44 AM UTC',
-      'No value (dry, equipment malfunction), Oct 30, 11:59 AM UTC',
+      'Measured Oct 30, 11:44 AM UTC, provisional: discharge; gage height: estimated',
+      'Measured Oct 30, 11:59 AM UTC, provisional: discharge; gage height: estimated; late: temperature (equipment fault)',
     ],
   );
+  await t.app.stop();
+});
+
+test('"provisional" comes first: the 120-character bound never cuts it', async () => {
+  const t = await setup({ config: { stations: '01646500' }, world: {} });
+  const codes = [
+    'ESTIMATED',
+    'REVISED',
+    'BACKWATER',
+    'REGULATED',
+    'DEBRIS',
+    'DIFFDATUM',
+    'RATINGDEV',
+    'TIDE',
+  ];
+  t.source.world.latest = () =>
+    latestBody([
+      series({ at: t.clock.now() - MINUTE, qualifier: codes, approval: 'Provisional' }),
+      series({
+        param: '00065',
+        at: t.clock.now() - MINUTE,
+        qualifier: codes,
+        approval: 'Provisional',
+      }),
+    ]);
+  await t.begin();
+  await t.create(POTOMAC);
+  const [text] = t.statesOf(F(POTOMAC, 'status')).map((s) => s.text);
+  assert.ok(text.length <= 120, `${text.length}`);
+  assert.match(text, /^Measured Oct 30, 11:44 AM UTC, provisional; discharge: estimated/);
   await t.app.stop();
 });

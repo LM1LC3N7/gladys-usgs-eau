@@ -796,11 +796,13 @@ export class WaterApp {
   /**
    * The values and the status of one station now.
    * @returns {{ code: string, zone: string, time?: number,
-   *   behind?: Array<{ kind: string, qualifiers: string[] }>, flags?: string[],
-   *   provisional?: boolean, qualifiers?: string[],
+   *   behind?: Array<{ kind: string, qualifiers: string[] }>,
+   *   flags?: Array<{ kind: string, codes: string[] }>, provisional?: string[],
+   *   published?: string[], qualifiers?: string[],
    *   values: Record<string, { value: number, stamp: number }> }}
-   * `flags`: the codes that nuance a value published (estimated...), `provisional`:
-   * a value published is not approved yet; `behind`: the kinds of the device
+   * `flags`: per kind published, the codes that nuance its value (estimated...);
+   * `provisional`: the kinds published whose value is not approved yet;
+   * `published`: the kinds published; `behind`: the kinds of the device
    * not current now, with the codes that invalidate them when there are some.
    */
   viewOf(id, mono) {
@@ -819,14 +821,16 @@ export class WaterApp {
     }
     let latest;
     const flags = [];
-    let provisional = false;
+    const provisional = [];
+    const published = [];
     for (const kind of KINDS) {
       const pick = picks.get(kind);
       if (pick?.state !== 'fresh') continue;
       values[kind] = { value: pick.series.value, stamp: pick.series.time };
       if (latest === undefined || pick.series.time > latest) latest = pick.series.time;
-      for (const code of pick.series.qualifiers) if (!flags.includes(code)) flags.push(code);
-      if (pick.series.provisional) provisional = true;
+      published.push(kind);
+      if (pick.series.qualifiers.length > 0) flags.push({ kind, codes: pick.series.qualifiers });
+      if (pick.series.provisional) provisional.push(kind);
     }
     if (latest !== undefined) {
       const behind = KINDS.filter(
@@ -835,7 +839,7 @@ export class WaterApp {
         kind,
         qualifiers: picks.get(kind)?.state === 'novalue' ? picks.get(kind).series.qualifiers : [],
       }));
-      return { code: 'ok', zone, time: latest, behind, flags, provisional, values };
+      return { code: 'ok', zone, time: latest, behind, flags, provisional, published, values };
     }
     const first = (state) => KINDS.map((k) => picks.get(k)).find((p) => p?.state === state);
     const empty = first('novalue');

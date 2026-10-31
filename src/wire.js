@@ -4,13 +4,19 @@
 // before connect(). Read-only: no command handler.
 // -----------------------------------------------------------------------------
 
-import { SHUTDOWN_LIMIT } from './constants.js';
+import { spawn } from 'node:child_process';
+import { SHUTDOWN_KILL_DELAY, SHUTDOWN_LIMIT } from './constants.js';
 
 /**
  * @param {import('@gladysassistant/integration-sdk').GladysIntegration} gladys
  * @param {import('./app.js').WaterApp} app
  */
-export function wire(gladys, app, logger, { exit = process.exit, timers = { setTimeout } } = {}) {
+export function wire(
+  gladys,
+  app,
+  logger,
+  { exit = process.exit, timers = { setTimeout }, watchdog = startWatchdog } = {},
+) {
   // --- Discovery -----------------------------------------------------------------
   // The stations already read, never a read (the next one comes at its time).
   gladys.onScanRequest(() => app.scan());
@@ -45,8 +51,30 @@ export function wire(gladys, app, logger, { exit = process.exit, timers = { setT
   // disconnects and exits. Whatever hangs (a frozen /data, a Gladys that never
   // answers), the process exits SHUTDOWN_LIMIT after the signal.
   gladys.handleShutdown(() => {
+    // Last resort, outside the process: an exit can itself hang (a thread of
+    // the pool stuck in open() on a FIFO of /data, a frozen mount), and no
+    // timer of this process would then run. A detached shell sends SIGKILL a
+    // little after the deadline (it finds nothing to kill after a clean exit).
+    watchdog(process.pid, SHUTDOWN_LIMIT + SHUTDOWN_KILL_DELAY);
     const timer = timers.setTimeout(() => exit(0), SHUTDOWN_LIMIT);
     timer?.unref?.();
     return app.stop();
   });
+}
+
+/** A detached `sh` that SIGKILLs `pid` after `ms` (never fails the shutdown). */
+export function startWatchdog(pid, ms, spawnImpl = spawn) {
+  try {
+    const seconds = Math.ceil(ms / 1000);
+    const child = spawnImpl(
+      '/bin/sh',
+      ['-c', `sleep ${seconds}; kill -9 ${Number(pid)} 2>/dev/null`],
+      { detached: true, stdio: 'ignore' },
+    );
+    child.on?.('error', () => {});
+    child.unref?.();
+    return child;
+  } catch {
+    return undefined;
+  }
 }
