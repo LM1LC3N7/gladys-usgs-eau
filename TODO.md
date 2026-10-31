@@ -166,3 +166,8 @@
 - Optional api.data.gov key (if 429s show up).
 - NWS flood categories for the stations that have some (another source).
 - Daily statistics (percentiles) when the USGS statistics API leaves v0.
+
+## Next patch (review r4, 8eaf822)
+
+- R4-S12: test a failed `rename` (state file is a directory, `save()` rejects).
+- Stale `.tmp`: a special file left at `state.json.tmp` keeps /data "not writable"; unlink it and retry once.
