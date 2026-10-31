@@ -52,6 +52,7 @@ src/constants.js        URLs, pacing, limits
 src/i18n.js             runtime texts (en/fr)
 test/helpers/app.js     the app on a fake Gladys, a scripted USGS and a virtual clock
 test/helpers/clock.js   virtual and real clocks (copied from the test kit)
+test/helpers/fifo-child.mjs  FIFOs in /data at a start and a stop, in a child process that must exit
 test/fixtures/          real captures of 2026-10-30
 ```
 
@@ -78,7 +79,13 @@ test/fixtures/          real captures of 2026-10-30
   never blocks. A timer a little early is armed again, never a skipped round.
 - **Clocks**: `monotonic` for every timer, pace, pause, budget and age; the
   wall clock only for /data and an answer without a usable `Date` header.
-- **/data**: every load, save and set-aside raced against 5 s.
+- **/data**: every load, save and set-aside raced against 5 s; every open is
+  `O_NONBLOCK | O_NOFOLLOW` and refuses anything but a regular file (a thread
+  of the pool blocked on a FIFO would hold even `process.exit()`).
+- **Stop**: the process exits `SHUTDOWN_LIMIT` (9 s) after SIGTERM at the
+  latest, after the clean stop (3 s + 5 s) and before Docker's SIGKILL (10 s,
+  the delay Gladys uses). Nothing is ever run outside the process (no child
+  process: `test/shutdown.test.js` scans `src/`).
 - Units: only `DEVICE_FEATURE_UNITS_BY_CATEGORY` of the core.
 - **Versions belong to the Release workflow**; `test/manifest.test.js` checks
   they agree. **Changelog** under `## [Unreleased]`. **User-facing text**

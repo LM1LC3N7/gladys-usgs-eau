@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 
 const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 import { KINDS, buildDevice } from '../src/devices.js';
+import { deviceStatus } from '../src/i18n.js';
 import { createMemoryStore } from '../src/store.js';
 import { settle } from './helpers/clock.js';
 import {
@@ -841,7 +842,7 @@ test('a qualifier sent as a plain string is read; nuancing codes are said, inval
   assert.deepEqual(t.statesOf(F(POTOMAC, 'gage-height-ft')), []);
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
-    ['Mesuré le 30 oct., 11:44 UTC, provisoire : débit ; débit : estimée ; température : révisée'],
+    ['Mesuré le 30 oct., 11:44 UTC ; débit : provisoire, estimée ; température : révisée'],
   );
   await t.app.stop();
 });
@@ -894,8 +895,8 @@ test('the status names the kind not current with its reason, the kind estimated,
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
     [
-      'Measured Oct 30, 11:44 AM UTC, provisional: discharge; gage height: estimated',
-      'Measured Oct 30, 11:59 AM UTC, provisional: discharge; gage height: estimated; late: temperature (equipment fault)',
+      'Measured Oct 30, 11:44 AM UTC; discharge: provisional; gage height: estimated',
+      'Measured Oct 30, 11:59 AM UTC; discharge: provisional; gage height: estimated; late: temperature (equipment fault)',
     ],
   );
   await t.app.stop();
@@ -929,4 +930,65 @@ test('"provisional" comes first: the 120-character bound never cuts it', async (
   assert.ok(text.length <= 120, `${text.length}`);
   assert.match(text, /^Measured Oct 30, 11:44 AM UTC, provisional; discharge: estimated/);
   await t.app.stop();
+});
+
+test('each kind named once ("discharge: provisional, estimated"), the provisional kinds first', () => {
+  const at = Date.UTC(2026, 9, 30, 11, 44);
+  const view = (published, provisional, flags = []) => ({
+    code: 'ok',
+    zone: 'UTC',
+    time: at,
+    behind: [],
+    published,
+    provisional,
+    flags,
+  });
+  const est = { kind: 'discharge', codes: ['ESTIMATED'] };
+  const rev = { kind: 'gage-height', codes: ['REVISED'] };
+  const both = ['discharge', 'gage-height'];
+  // Review r3, m2: was "provisional: discharge; discharge: estimated".
+  assert.equal(
+    deviceStatus('en', view(both, ['discharge'], [est])),
+    'Measured Oct 30, 11:44 AM UTC; discharge: provisional, estimated',
+  );
+  assert.equal(
+    deviceStatus('fr', view(both, ['discharge'], [est])),
+    'Mesuré le 30 oct., 11:44 UTC ; débit : provisoire, estimée',
+  );
+  // A provisional kind after another in the order of the kinds: said first.
+  assert.equal(
+    deviceStatus('en', view(both, ['gage-height'], [est, rev])),
+    'Measured Oct 30, 11:44 AM UTC; gage height: provisional, revised; discharge: estimated',
+  );
+  // Every value provisional: said once, right after the time.
+  assert.equal(
+    deviceStatus('en', view(both, both, [est])),
+    'Measured Oct 30, 11:44 AM UTC, provisional; discharge: estimated',
+  );
+  assert.equal(deviceStatus('fr', view(both, both)), 'Mesuré le 30 oct., 11:44 UTC, provisoire');
+  // Approved: only the codes; nothing published: nothing said provisional.
+  assert.equal(deviceStatus('en', view(both, [])), 'Measured Oct 30, 11:44 AM UTC');
+  assert.equal(
+    deviceStatus('en', view(both, [], [rev])),
+    'Measured Oct 30, 11:44 AM UTC; gage height: revised',
+  );
+  assert.equal(deviceStatus('en', view([], [])), 'Measured Oct 30, 11:44 AM UTC');
+});
+
+test('not every kind provisional: "provisional" right after the time, never cut by the bound', () => {
+  const long = ['GHNOTASSCPKQ', 'RATINGDEV', 'OTHERAGENCY', 'FORCEINTERPOLATION', 'DIFFDATUM'];
+  const text = deviceStatus('en', {
+    code: 'ok',
+    zone: 'America/New_York',
+    time: Date.UTC(2026, 9, 30, 11, 44),
+    behind: [{ kind: 'groundwater-depth', qualifiers: ['EQUIP'] }],
+    published: ['discharge', 'gage-height', 'water-temperature'],
+    provisional: ['water-temperature'],
+    flags: KINDS.map((kind) => ({ kind, codes: long })),
+  });
+  assert.equal(text.length, 120);
+  assert.match(
+    text,
+    /^Measured Oct 30, 7:44 AM EDT; temperature: provisional, gage height not tied/,
+  );
 });

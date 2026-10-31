@@ -59,13 +59,14 @@ floods, follow the National Weather Service and your local authorities.
 - Gladys has no unit for a flow: the discharge is a plain number, its unit in
   its name.
 - The **Status** gives the time of the measurement in the time zone of the
-  station ("Measured Oct 30, 1:50 AM EDT"), what the USGS says of the values
-  published, first "provisional" (or the kinds that are, when not all), then
-  each kind with its codes ("Measured Oct 30, 1:50 AM EDT, provisional;
-  discharge: estimated"), the kinds late with their reason ("late:
-  temperature (equipment fault)"; the text is cut at 120 characters, from the
-  end), or why
-  there is no value: "No value (dry)", "No value (ice)", "No value (below the
+  station ("Measured Oct 30, 1:50 AM EDT"), then what the USGS says of the
+  values published: when they are all provisional (the usual case),
+  "provisional" once, then each kind with its codes ("Measured Oct 30, 1:50 AM
+  EDT, provisional; discharge: estimated"); otherwise each kind once, the
+  provisional ones first ("Measured Oct 30, 1:50 AM EDT; discharge:
+  provisional, estimated; gage height: revised"); then the kinds late with
+  their reason ("late: temperature (equipment fault)"; the text is cut at 120
+  characters, from the end), or why there is no value: "No value (dry)", "No value (ice)", "No value (below the
   minimum measurable)", "Unreadable value at the source", "No current value;
   last one …", "No continuous data at this station", "Station unknown to the
   USGS". The connection status says how many stations have qualified values.
@@ -180,3 +181,12 @@ read. Before the first read: "Waiting for the first read".
 - No personal data is read nor kept. /data keeps the time of the last read,
   the pause, the names, time zones and kinds of the stations, and the time of
   the last measurement published per feature.
+- /data is only read and written as a regular file: a FIFO, a link or a
+  device in place of the file is unreadable (set aside) and in place of its
+  temporary file makes /data not writable (said in the status); it is never
+  waited on.
+- When Gladys stops the integration, it waits 3 seconds at most for the read
+  running, 5 seconds at most for /data, and exits 9 seconds after the stop at
+  the latest. Docker, which Gladys asks for the stop, ends it after 10 seconds
+  whatever holds it (a /data frozen by the system). Nothing is ever run
+  outside its process.

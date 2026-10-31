@@ -4,19 +4,13 @@
 // before connect(). Read-only: no command handler.
 // -----------------------------------------------------------------------------
 
-import { spawn } from 'node:child_process';
-import { SHUTDOWN_KILL_DELAY, SHUTDOWN_LIMIT } from './constants.js';
+import { SHUTDOWN_LIMIT } from './constants.js';
 
 /**
  * @param {import('@gladysassistant/integration-sdk').GladysIntegration} gladys
  * @param {import('./app.js').WaterApp} app
  */
-export function wire(
-  gladys,
-  app,
-  logger,
-  { exit = process.exit, timers = { setTimeout }, watchdog = startWatchdog } = {},
-) {
+export function wire(gladys, app, logger, { exit = process.exit, timers = { setTimeout } } = {}) {
   // --- Discovery -----------------------------------------------------------------
   // The stations already read, never a read (the next one comes at its time).
   gladys.onScanRequest(() => app.scan());
@@ -47,34 +41,17 @@ export function wire(
   gladys.on('disconnected', () => {
     app.disconnected().catch((err) => logger.error(`Stop failed (${err?.name ?? 'Error'})`));
   });
-  // The supervisor stops the container: the app stops (bounded), then the SDK
-  // disconnects and exits. Whatever hangs (a frozen /data, a Gladys that never
-  // answers), the process exits SHUTDOWN_LIMIT after the signal.
+  // The supervisor stops the container: the app stops (the read running
+  // awaited STOP_WAIT at most, then the save of /data SAVE_WAIT at most), then
+  // the SDK disconnects and exits. Whatever else holds the stop back (a stop
+  // queued behind a start, a Gladys that never answers the close), the
+  // process exits SHUTDOWN_LIMIT after the signal, before Docker's SIGKILL.
+  // Nothing can hold the exit itself on a FIFO of /data: the store never
+  // opens a file in a way that blocks (src/store.js). A mount of /data frozen
+  // in the kernel is the one case left to Docker's SIGKILL.
   gladys.handleShutdown(() => {
-    // Last resort, outside the process: an exit can itself hang (a thread of
-    // the pool stuck in open() on a FIFO of /data, a frozen mount), and no
-    // timer of this process would then run. A detached shell sends SIGKILL a
-    // little after the deadline (it finds nothing to kill after a clean exit).
-    watchdog(process.pid, SHUTDOWN_LIMIT + SHUTDOWN_KILL_DELAY);
     const timer = timers.setTimeout(() => exit(0), SHUTDOWN_LIMIT);
     timer?.unref?.();
     return app.stop();
   });
-}
-
-/** A detached `sh` that SIGKILLs `pid` after `ms` (never fails the shutdown). */
-export function startWatchdog(pid, ms, spawnImpl = spawn) {
-  try {
-    const seconds = Math.ceil(ms / 1000);
-    const child = spawnImpl(
-      '/bin/sh',
-      ['-c', `sleep ${seconds}; kill -9 ${Number(pid)} 2>/dev/null`],
-      { detached: true, stdio: 'ignore' },
-    );
-    child.on?.('error', () => {});
-    child.unref?.();
-    return child;
-  } catch {
-    return undefined;
-  }
 }

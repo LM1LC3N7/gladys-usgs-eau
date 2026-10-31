@@ -5,10 +5,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { createFileStore, createMemoryStore } from '../src/store.js';
 import { settle } from './helpers/clock.js';
 import { HOUR, NOW, REAL_STATIONS, setup } from './helpers/app.js';
@@ -133,19 +132,45 @@ test('rubbish in /data is dropped entry by entry', async () => {
   assert.equal(app.lastAttemptAt, NOW - HOUR);
 });
 
-test('a FIFO in place of /data never blocks the start: unreadable, set aside', async (t) => {
+// A FIFO in place of the state file or of its temporary file: test/shutdown.test.js
+// (in a child process: a thread blocked on a FIFO would hold the exit of this one).
+
+test('a link in place of the state file or of its temporary file is never followed', async (t) => {
+  const dir = await dirOf(t);
+  const target = join(dir, 'elsewhere.json');
+  await writeFile(target, '{"lastAttemptAt":1}');
+  const file = join(dir, 'state.json');
+  await symlink(target, file);
+  assert.deepEqual(await createFileStore(file).load(), { ok: false, code: 'ELOOP' });
+  const other = join(dir, 'other.json');
+  await symlink(target, `${other}.tmp`);
+  await assert.rejects(createFileStore(other).save({ a: 1 }), { code: 'ELOOP' });
+  assert.equal(await readFile(target, 'utf8'), '{"lastAttemptAt":1}', 'the target untouched');
+  assert.equal((await lstat(`${other}.tmp`)).isSymbolicLink(), true);
+});
+
+test('a temporary file left by a crash is replaced whole; every file closed', async (t) => {
   const dir = await dirOf(t);
   const file = join(dir, 'state.json');
-  execFileSync('mkfifo', [file]);
-  assert.deepEqual(await createFileStore(file).load(), { ok: false, code: 'not_file' });
-  const { begin, app } = await setup({
-    store: createFileStore(file),
-    config: { stations: '01646500' },
-  });
-  await begin();
-  assert.equal(app.dataUnreadable, true);
-  assert.ok((await readdir(dir)).some((n) => n.startsWith('state.json.unreadable-')));
-  await app.stop();
+  await writeFile(`${file}.tmp`, `{"left":"${'x'.repeat(1000)}"}`);
+  const store = createFileStore(file);
+  const fds = async () => (await readdir('/proc/self/fd')).length;
+  const before = await fds();
+  await store.save({ a: 0 });
+  assert.deepEqual(await store.load(), { ok: true, data: { a: 0 } }, 'no byte of the old file');
+  for (let i = 1; i < 5; i += 1) await store.save({ a: i });
+  assert.equal(await fds(), before, 'no descriptor left open');
+  assert.deepEqual(await store.load(), { ok: true, data: { a: 4 } });
+  assert.equal(await fds(), before);
+});
+
+test('a directory in place of the temporary file: the save fails, nothing renamed', async (t) => {
+  const dir = await dirOf(t);
+  const file = join(dir, 'state.json');
+  await writeFile(file, '{"a":0}');
+  await mkdir(`${file}.tmp`);
+  await assert.rejects(createFileStore(file).save({ a: 1 }));
+  assert.equal(await readFile(file, 'utf8'), '{"a":0}');
 });
 
 test('a /data load that never ends is bounded: unreadable after 5 s, never empty', async () => {

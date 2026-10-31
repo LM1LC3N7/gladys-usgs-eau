@@ -29,8 +29,11 @@ the notes of the version's GitHub Release.
   revised...) and "provisional" are said in the status; discharge in m³/s
   (30208) read too; the version read from package.json; time zones follow
   daylight saving whatever the flag of the USGS (Florida), American Samoa;
-  any Retry-After capped at 6 h; a 5xx pause said as such; the process exits
-  15 s after a stop signal at the latest.
+  any Retry-After capped at 6 h; a 5xx pause said as such.
 - Review r2: the status says "provisional" first, then the codes of each kind
-  ("discharge: estimated") and the kinds late with their reason; a last-resort
-  SIGKILL from outside the process 3 s after the shutdown deadline.
+  ("discharge: estimated") and the kinds late with their reason.
+- Review r3: the process exits 9 s after a stop signal at the latest, before
+  the SIGKILL of Docker (10 s), and never runs anything outside itself; /data
+  is only read and written as a regular file, never waited on (a FIFO or a
+  link in its place is unreadable or not writable); the status names each kind
+  once ("discharge: provisional, estimated").

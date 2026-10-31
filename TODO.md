@@ -45,8 +45,10 @@
   "N" wrongly); `ZP-11` -> Pacific/Pago_Pago, other `ZP±hh` -> Etc/GMT.
 - Retry-After of any digit count (review r1, m2): 12 digits read, more = the
   cap; the pause is capped at 6 h.
-- The process exits 15 s after SIGTERM/SIGINT at the latest, whatever hangs
-  (review r1, s05): a timer in the shutdown handler (src/wire.js).
+- The process exits 9 s after SIGTERM/SIGINT at the latest (review r1, s05;
+  r3): a timer in the shutdown handler (src/wire.js), after the clean stop
+  (the read 3 s, /data 5 s at most) and before Docker's SIGKILL (Gladys stops
+  a container with `container.stop()`, Docker's 10 s).
 - A date of the last read in /data before 2020 (negative, 0) is invalid: first
   read one interval after the start (review r1, s05 "date negative").
 - SDK `^0.16.0` (the template's; the latest published, checked on the
@@ -139,9 +141,22 @@
   (approval_status asked), R2-22 (the reason of a late kind), R2-13 (AST =
   Puerto Rico), R2-33 (the shutdown runs app.stop); the status says
   "provisional" first and the codes per kind (m1, m2), shorter words ("late",
-  "equipment fault") so that 120 characters hold them; a detached `sh`
-  SIGKILLs the process 3 s after the 15 s deadline when the exit itself hangs
-  (m3); a device created while dry has only Status until Update (m4, docs).
+  "equipment fault") so that 120 characters hold them; a device created while
+  dry has only Status until Update (m4, docs).
+- Review r3 (I1, the reviewer's simpler option): the shutdown watchdog of r2
+  (a detached `sh` sending SIGKILL) removed: under Gladys, Docker kills at
+  10 s before it, and outside a container it could kill a process that
+  reused the PID. Nothing is run outside the process (a test scans src/).
+  The cause it covered is removed at its source: every open of /data is
+  `O_NONBLOCK | O_NOFOLLOW` and anything but a regular file is closed before
+  a byte is read or written (a FIFO no longer blocks a thread of the pool,
+  which held even `process.exit()`); a test runs FIFOs at a start and at a
+  stop in a child process that must exit. `SHUTDOWN_LIMIT` 15 s -> 9 s. A
+  mount frozen in the kernel is left to Docker's SIGKILL. The status names
+  each kind once ("discharge: provisional, estimated", m2). The reviewer's
+  mutant lists (r1 to r3) replayed with 24 new ones (store flags, status,
+  deadline): all killed but S2 and R2-5 (equivalent, agreed) and the control
+  R2-38; 24 no longer apply (the watchdog and the old status code are gone).
 - Real-clock tests: ×20 for the period (two reads, 15 min = 45 s); ×60 for the
   read at the end of a 20 min pause (20 s), so that each fits in the 60 s test
   timeout.

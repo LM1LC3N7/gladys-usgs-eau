@@ -104,14 +104,17 @@ export const SEARCH_WAIT = 45 * SECOND;
 /** Stations shown by a search, at most. */
 export const SEARCH_SHOWN = 15;
 
-/** A save or a load of /data is awaited this long at most (a frozen /data never holds anything back). */
+/** A save or a load of /data is awaited this long at most (a slow /data never holds the app back). */
 export const SAVE_WAIT = 5 * SECOND;
-/** After a stop signal, the process exits this long after it at the latest. */
-export const SHUTDOWN_LIMIT = 15 * SECOND;
-/** Then, if the exit itself hangs, a SIGKILL this long after (from outside the process). */
-export const SHUTDOWN_KILL_DELAY = 3 * SECOND;
-/** A clean stop waits this long, at most, for the read running. */
+/** A clean stop waits this long, at most, for the read running (then the save, SAVE_WAIT at most). */
 export const STOP_WAIT = 3 * SECOND;
+/**
+ * After a stop signal, the process exits this long after it at the latest:
+ * after the clean stop (STOP_WAIT + SAVE_WAIT, 8 s at most, then the SDK
+ * closes its connection) and before Docker's SIGKILL, 10 s after its SIGTERM
+ * (Gladys stops a container with Docker's default delay).
+ */
+export const SHUTDOWN_LIMIT = 9 * SECOND;
 /** Dates of the last values published kept in /data, at most. */
 export const MAX_PUBLISHED = 400;
 /** A status text, at most (characters). */

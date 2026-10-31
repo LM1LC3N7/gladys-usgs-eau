@@ -35,6 +35,9 @@ Reports are welcome.
   across restarts), the next read at the end of the pause. A 5xx of the values
   pauses the reads only; a 5xx of the names or of a search pauses nothing.
 - A "Search stations" button finds the station numbers by words of the name.
+- /data is only read and written as a regular file (a FIFO or a link in its
+  place is never waited on); a stop ends 9 s after the signal at the latest,
+  before the SIGKILL of Docker (10 s); nothing runs outside the process.
 
 ## Development
 

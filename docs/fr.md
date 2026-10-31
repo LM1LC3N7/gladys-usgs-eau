@@ -63,13 +63,14 @@ Service et les autorités locales.
 - Gladys n'a pas d'unité de débit : le débit est un nombre simple, son unité
   dans son nom.
 - L'**État** donne l'heure de la mesure dans le fuseau de la station
-  (« Mesuré le 30 oct., 01:50 UTC−4 »), ce que l'USGS dit des valeurs publiées
-  d'abord « provisoire » (ou les mesures qui le sont, si pas toutes), puis
-  chaque mesure avec ses codes (« Mesuré le 30 oct., 01:50 UTC−4, provisoire ;
-  débit : estimée »), les mesures en retard avec leur raison (« en retard :
-  température (panne) » ; le texte est coupé à 120 caractères, par la fin), ou
-  pourquoi
-  il n'y a pas de valeur : « Sans valeur (à sec) », « Sans valeur (glace) »,
+  (« Mesuré le 30 oct., 01:50 UTC−4 »), puis ce que l'USGS dit des valeurs
+  publiées : quand toutes sont provisoires (le cas courant), « provisoire »
+  une fois, puis chaque mesure avec ses codes (« Mesuré le 30 oct., 01:50
+  UTC−4, provisoire ; débit : estimée ») ; sinon chaque mesure une fois, les
+  provisoires d'abord (« Mesuré le 30 oct., 01:50 UTC−4 ; débit : provisoire,
+  estimée ; hauteur : révisée ») ; puis les mesures en retard avec leur raison
+  (« en retard : température (panne) » ; le texte est coupé à 120 caractères,
+  par la fin), ou pourquoi il n'y a pas de valeur : « Sans valeur (à sec) », « Sans valeur (glace) »,
   « Sans valeur (sous le minimum mesurable) », « Valeur illisible à la
   source », « Aucune valeur récente ; dernière le … », « Aucune donnée en
   continu à cette station », « Station inconnue de l'USGS ». L'état de
@@ -196,3 +197,12 @@ Avant la première lecture : « En attente de la première lecture ».
 - Aucune donnée personnelle n'est lue ni gardée. /data garde l'heure de la
   dernière lecture, la pause, les noms, fuseaux et mesures des stations, et
   l'heure de la dernière mesure publiée par fonction.
+- /data n'est lu et écrit que comme un fichier ordinaire : un FIFO, un lien ou
+  un périphérique à la place du fichier le rend illisible (mis de côté), à la
+  place de son fichier temporaire rend /data non inscriptible (dit dans
+  l'état) ; il n'est jamais attendu.
+- Quand Gladys arrête l'intégration, elle attend la lecture en cours
+  3 secondes au plus, /data 5 secondes au plus, et s'arrête 9 secondes après
+  la demande au plus tard. Docker, à qui Gladys demande l'arrêt, y met fin au
+  bout de 10 secondes quoi qui le retienne (un /data figé par le système).
+  Rien n'est jamais lancé hors de son processus.

@@ -12,11 +12,30 @@
 // -----------------------------------------------------------------------------
 
 import { constants } from 'node:fs';
-import { open, rename, writeFile } from 'node:fs/promises';
+import { open, rename } from 'node:fs/promises';
 
 export const DEFAULT_STATE_FILE = '/data/usgs-eau-state.json';
 /** A larger file is not ours: unreadable (never taken for an empty state). */
 const MAX_STATE_BYTES = 1024 * 1024;
+
+/**
+ * Every open of /data returns at once, whatever is there: O_NONBLOCK (a FIFO
+ * opens without waiting for the other end, or fails at once with ENXIO when
+ * opened to write without a reader), O_NOFOLLOW (a link is refused: ELOOP),
+ * then anything but a regular file is closed before a byte is read or
+ * written. A thread of the pool blocked in open() of a FIFO would hold even
+ * process.exit() (libuv joins its threads at exit), so the stop of the
+ * container would wait for Docker's SIGKILL.
+ */
+const READ_FLAGS = constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW;
+const WRITE_FLAGS =
+  constants.O_WRONLY |
+  constants.O_CREAT |
+  constants.O_TRUNC |
+  constants.O_NONBLOCK |
+  constants.O_NOFOLLOW;
+
+const notFile = () => Object.assign(new Error('not a regular file'), { code: 'not_file' });
 
 const isPlain = (data) => Boolean(data) && typeof data === 'object' && !Array.isArray(data);
 
@@ -29,19 +48,28 @@ export function createFileStore(file = DEFAULT_STATE_FILE) {
   let queue = Promise.resolve();
   const write = async (data) => {
     const tmp = `${file}.tmp`;
-    await writeFile(tmp, JSON.stringify(data), 'utf8');
+    const handle = await open(tmp, WRITE_FLAGS);
+    try {
+      if (!(await handle.stat()).isFile()) throw notFile();
+      await handle.writeFile(JSON.stringify(data), 'utf8');
+    } catch (err) {
+      await handle.close().catch(() => {});
+      throw err;
+    }
+    await handle.close();
     await rename(tmp, file);
   };
   return {
     /**
-     * Asynchronous and bounded: the app also races it against a timer (a FIFO
-     * or a frozen mount never blocks the process). At most MAX_STATE_BYTES + 1
-     * bytes are read.
+     * Never waits on a FIFO nor follows a link (READ_FLAGS): a special file is
+     * unreadable, never read. At most MAX_STATE_BYTES + 1 bytes are read. A
+     * slow mount is raced against SAVE_WAIT by the app, which then goes on
+     * without it.
      */
     async load() {
       let handle;
       try {
-        handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK);
+        handle = await open(file, READ_FLAGS);
         const info = await handle.stat();
         if (!info.isFile()) return { ok: false, code: 'not_file' };
         if (info.size > MAX_STATE_BYTES) return { ok: false, code: 'too_large' };

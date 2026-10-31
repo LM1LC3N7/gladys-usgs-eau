@@ -122,8 +122,11 @@ export function stationTime(language, at, zone) {
 }
 
 /**
- * The status text of a station.
- * @param {{ code: string, time?: number, zone: string, behind?: string[], qualifiers?: string[] }} view
+ * The status text of a station (the view of `WaterApp.viewOf`).
+ * @param {{ code: string, time?: number, zone: string, qualifiers?: string[],
+ *   behind?: Array<{ kind: string, qualifiers: string[] }>,
+ *   flags?: Array<{ kind: string, codes: string[] }>, provisional?: string[],
+ *   published?: string[] }} view
  */
 export function deviceStatus(language, view) {
   const fr = language === 'fr';
@@ -136,20 +139,25 @@ export function deviceStatus(language, view) {
         : KIND_NAMES[lang][kind],
     )
     .join(', ');
-  // What the USGS says of the values published, first (the bound never cuts it):
-  // "provisional" (or the kinds that are, when not all), then the codes per kind.
-  const name = (kind) => KIND_NAMES[lang][kind];
-  const prov = view.provisional ?? [];
+  // What the USGS says of the values published, right after the time (the
+  // bound of 120 characters cuts from the end, never "provisional"): every
+  // value provisional (the usual case), said once ("…, provisional;
+  // discharge: estimated"); otherwise each kind named once, the provisional
+  // ones first, "provisional" before its codes ("…; discharge: provisional,
+  // estimated; gage height: revised").
   const word = fr ? 'provisoire' : 'provisional';
-  let flags = '';
-  if (prov.length > 0) {
-    flags +=
-      prov.length === (view.published ?? []).length
-        ? `, ${word}`
-        : `, ${word}${fr ? ' : ' : ': '}${prov.map(name).join(', ')}`;
-  }
-  for (const { kind, codes } of view.flags ?? []) {
-    flags += `${fr ? ' ; ' : '; '}${name(kind)}${fr ? ' : ' : ': '}${qualifierText(lang, codes)}`;
+  const published = view.published ?? [];
+  const prov = new Set(view.provisional ?? []);
+  const codes = new Map((view.flags ?? []).map((f) => [f.kind, f.codes]));
+  const allProvisional = prov.size > 0 && prov.size === published.length;
+  let flags = allProvisional ? `, ${word}` : '';
+  const order = [...published.filter((k) => prov.has(k)), ...published.filter((k) => !prov.has(k))];
+  for (const kind of order) {
+    const notes = [];
+    if (prov.has(kind) && !allProvisional) notes.push(word);
+    if (codes.has(kind)) notes.push(qualifierText(lang, codes.get(kind)));
+    if (notes.length === 0) continue;
+    flags += `${fr ? ' ; ' : '; '}${KIND_NAMES[lang][kind]}${fr ? ' : ' : ': '}${notes.join(', ')}`;
   }
   switch (view.code) {
     case 'ok':
