@@ -167,6 +167,8 @@ function keptPublished(object) {
 }
 
 const stationsKey = (ids) => ids.join(',');
+/** A date of /data before this (a zero, a negative number) is invalid, never "long ago". */
+const OLDEST = Date.UTC(2020, 0, 1);
 
 export class WaterApp {
   constructor({
@@ -276,7 +278,11 @@ export class WaterApp {
     if (loaded?.ok && loaded.absent) {
       this.lastAttemptAt = undefined;
       this.lastReadMono = undefined;
-    } else if (!loaded?.ok || (kept.lastAttemptAt !== undefined && !finite(kept.lastAttemptAt))) {
+    } else if (
+      !loaded?.ok ||
+      (kept.lastAttemptAt !== undefined &&
+        !(finite(kept.lastAttemptAt) && kept.lastAttemptAt > OLDEST))
+    ) {
       this.lastAttemptAt = at;
       this.lastReadMono = mono;
     } else if (finite(kept.lastAttemptAt)) {
@@ -789,8 +795,13 @@ export class WaterApp {
 
   /**
    * The values and the status of one station now.
-   * @returns {{ code: string, zone: string, time?: number, behind?: string[],
-   *   qualifiers?: string[], values: Record<string, { value: number, stamp: number }> }}
+   * @returns {{ code: string, zone: string, time?: number,
+   *   behind?: Array<{ kind: string, qualifiers: string[] }>, flags?: string[],
+   *   provisional?: boolean, qualifiers?: string[],
+   *   values: Record<string, { value: number, stamp: number }> }}
+   * `flags`: the codes that nuance a value published (estimated...), `provisional`:
+   * a value published is not approved yet; `behind`: the kinds of the device
+   * not current now, with the codes that invalidate them when there are some.
    */
   viewOf(id, mono) {
     const entry = this.stations.get(id);
@@ -807,16 +818,24 @@ export class WaterApp {
       picks.set(kind, selectSeries(list, ref, this.maxAgeMs, FUTURE_SLACK));
     }
     let latest;
-    for (const [kind, pick] of picks) {
-      if (pick.state !== 'fresh') continue;
+    const flags = [];
+    let provisional = false;
+    for (const kind of KINDS) {
+      const pick = picks.get(kind);
+      if (pick?.state !== 'fresh') continue;
       values[kind] = { value: pick.series.value, stamp: pick.series.time };
       if (latest === undefined || pick.series.time > latest) latest = pick.series.time;
+      for (const code of pick.series.qualifiers) if (!flags.includes(code)) flags.push(code);
+      if (pick.series.provisional) provisional = true;
     }
     if (latest !== undefined) {
       const behind = KINDS.filter(
         (kind) => entry?.kinds.has(kind) && picks.get(kind)?.state !== 'fresh',
-      );
-      return { code: 'ok', zone, time: latest, behind, values };
+      ).map((kind) => ({
+        kind,
+        qualifiers: picks.get(kind)?.state === 'novalue' ? picks.get(kind).series.qualifiers : [],
+      }));
+      return { code: 'ok', zone, time: latest, behind, flags, provisional, values };
     }
     const first = (state) => KINDS.map((k) => picks.get(k)).find((p) => p?.state === state);
     const empty = first('novalue');
@@ -1038,13 +1057,16 @@ export class WaterApp {
     } else if (outcome.ok) {
       let fresh = 0;
       let unknown = 0;
+      let flagged = 0;
       for (const id of ids) {
         const view = this.viewOf(id, mono);
         if (view.code === 'ok') fresh += 1;
+        if (view.code === 'ok' && view.flags.length > 0) flagged += 1;
         if (view.code === 'unknown') unknown += 1;
       }
       connected = fresh > 0;
       parts.unshift(fresh > 0 ? T.ok(ids.length, fresh) : T.noneCurrent(ids.length));
+      if (flagged > 0) parts.push(T.flagged(flagged));
       if (unknown > 0) parts.push(T.unknown(unknown));
       // A 429 of a search after the read: the next read waits for its end.
       if (this.pause && this.pause.due > mono) {

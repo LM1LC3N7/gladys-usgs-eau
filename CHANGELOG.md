@@ -23,3 +23,11 @@ the notes of the version's GitHub Release.
   published as a number. 429 pauses every request (60 s to 6 h, kept across
   restarts), the next read at the end of the pause. A button finds the station
   numbers by name. Read-only.
+- Review r1: the qualifiers of the USGS are read (the real codes): a value
+  with a code that invalidates it (dry, ice, equipment, below the minimum,
+  less than...) is never published, a code that only nuances it (estimated,
+  revised...) and "provisional" are said in the status; discharge in m³/s
+  (30208) read too; the version read from package.json; time zones follow
+  daylight saving whatever the flag of the USGS (Florida), American Samoa;
+  any Retry-After capped at 6 h; a 5xx pause said as such; the process exits
+  15 s after a stop signal at the latest.

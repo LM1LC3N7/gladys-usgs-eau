@@ -33,33 +33,50 @@ floods, follow the National Weather Service and your local authorities.
 
 | Feature                           | U.S. units | Metric units | USGS parameter |
 | --------------------------------- | ---------- | ------------ | -------------- |
-| Discharge                         | ft³/s      | m³/s         | 00060          |
+| Discharge                         | ft³/s      | m³/s         | 00060, 30208   |
 | Gage height                       | ft         | m            | 00065          |
 | Water temperature                 | °F         | °C           | 00010          |
 | Depth to water below land surface | ft         | m            | 72019          |
 | Status                            | text       | text         |                |
 
-- A feature is offered only once the station gave a current value of it.
+- A feature is offered only once the station gave a current value of it. A
+  kind that shows up later (a well no longer dry, a gauge after the ice) is
+  added to the device in the Discovery tab: its **Update** button gives the
+  device the new feature, keeping the others and their history.
+- Parameter 30208 is the discharge in m³/s that a few stations publish instead
+  of (or beside) 00060; it fills the same feature. Not read: the measured
+  discharge 00061 (no continuous series on the service on 30 October 2026) and
+  the elevation of lakes and reservoirs (62614).
 - Conversions are exact (1 ft = 0.3048 m, 1 ft³/s = 0.028316846592 m³/s,
   °F = °C × 9/5 + 32), then rounded (0.001 for ft, ft³/s and m, 0.0001 for
   m³/s, 0.01 for degrees).
 - The unit is part of the feature: a device keeps the units it was created
   with, even when the form changes them. To change units, delete the device and
-  create it again from Discovery (the history of the old feature stays with
-  it).
+  create it again from Discovery, or use **Update** in Discovery: either way the
+  features of the old units, and their history, go.
 - Gladys has no unit for a flow: the discharge is a plain number, its unit in
   its name.
 - The **Status** gives the time of the measurement in the time zone of the
-  station (from the USGS: "Measured Oct 30, 1:50 AM EDT"), the kinds no longer
-  current, or why there is no value: "No value (dry)", "No value (ice)",
-  "Unreadable value at the source", "No current value; last one …",
-  "No continuous data at this station", "Station unknown to the USGS".
+  station ("Measured Oct 30, 1:50 AM EDT"), what the USGS says of the values
+  published ("(estimated, provisional)"), the kinds no longer current, or why
+  there is no value: "No value (dry)", "No value (ice)", "No value (below the
+  minimum measurable)", "Unreadable value at the source", "No current value;
+  last one …", "No continuous data at this station", "Station unknown to the
+  USGS". The connection status says how many stations have qualified values.
+- The time zone of a station comes from the USGS (its abbreviation). Its
+  daylight saving flag is wrong for many stations (most of Florida says "no
+  daylight saving"): it is only used to tell Arizona from the rest of the
+  Mountain zone; every other station follows the daylight saving time of its
+  zone. American Samoa (`ZP-11`) shows its own time; an unknown zone, UTC.
 
 ## Freshness
 
 - Each measurement is published **once** (deduplicated on its time, kept in
   /data), without a creation date: a scene "gage height above X" fires on a
-  new measurement, not at every read.
+  new measurement, not at every read. The point in the Gladys history is dated
+  when it is published, not when it was measured: later by the transmission
+  delay of the station plus up to one read interval (at most the maximum age).
+  The SDK can date a state, but a dated state does not fire scenes.
 - A measurement older than the **maximum age** of the form is not current: it
   is not published, the status says when it was measured. The age is counted
   from the `Date` of the USGS answer (from our clock when that header is
@@ -68,8 +85,20 @@ floods, follow the National Weather Service and your local authorities.
   plain number (a text, an empty value), out of the plausible range of its kind
   (for example a "-999999") or in an unknown unit is unreadable: never
   published.
-- A station that gives no value (the USGS sends none, with a reason such as
-  `DRY`, `ICE`, `EQUIPMENT`) never gets a 0: the status gives the reason.
+- **Qualifiers.** The USGS sends codes with a value. Those that only nuance
+  it (`ESTIMATED`, `REVISED`, `BACKWATER`, `REGULATED`, `DEBRIS`, `DIFFDATUM`,
+  `RATINGDEV`, `TIDE`, `URBAN`, `OTHERAGENCY`, `OPPORTUNISTIC`,
+  `FORCEINTERPOLATION`): the value is published, the status says the code.
+  Every other code (`DRY`, `ICE`, `EQUIP`, `MAINT`, `UNAVAIL`, `TEST`,
+  `DISCONTINUED`, `SEASONAL`, `FLOOD`, `DAMFAILURE`, `ZEROFLOW`, `LESSTHAN`,
+  `GREATERTHAN`, `BLWMIN`, `GHNOTASSCPKQ`, and any code not in these lists)
+  means the number is not a measurement of the water: it is not published,
+  even when the USGS gives one (a dry well's number is the depth of its
+  sensor; a dry or zero-flow stream gauge's `0.00` is not published either;
+  "less than" is a bound), and the status gives the reason. The list is the
+  one the real service sent on 30 October 2026.
+- Most values are provisional (not yet approved by the USGS): the status says
+  "provisional".
 - A station with several series of one kind (two sensors, a series stopped in
   2019): among the current ones, the one of smallest series id (the same one from read to read while it stays current).
 - Gladys keeps the last value published: when a value is no longer current,

@@ -57,13 +57,18 @@ test/fixtures/          real captures of 2026-10-30
 
 ## Rules
 
+- **Version**: read from package.json at run time (`src/constants.js`), never
+  hard-coded.
 - **External ids are forever**: `ext:<selector>:station:<agency>-<number>`,
   feature keys `discharge-cfs`, `discharge-m3s`, `gage-height-ft`,
   `gage-height-m`, `water-temperature-f`, `water-temperature-c`,
   `groundwater-depth-ft`, `groundwater-depth-m`, `status`. The unit is in the
   key: a value is only ever published in the unit of the feature it goes to.
-- **Never a text as a number**: a null value (dry, ice...), a text, an empty
-  value, a value out of range or in an unknown unit goes to the status only.
+- **Never a text as a number**: a null value (dry, ice...), a value with a
+  qualifier that invalidates it (any code but those of `NUANCING` in
+  `src/usgs.js`: DRY, ICE, EQUIP, BLWMIN, LESSTHAN, unknown codes...), a text,
+  an empty value, a value out of range or in an unknown unit goes to the status
+  only. Nuancing codes and "provisional" are said in the status.
 - **Freshness**: a measurement published once (its time in /data), only while
   younger than the maximum age (against the `Date` of the answer), without
   `created_at`. Stale data never makes the integration "connected".

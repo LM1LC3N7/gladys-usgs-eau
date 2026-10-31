@@ -8,7 +8,8 @@
 // latest value: { time_series_id, monitoring_location_id, parameter_code,
 // statistic_id, time (ISO 8601 with offset), value (a STRING, or null when
 // the station gives none: dry well, ice, equipment...), unit_of_measure,
-// qualifier (null or a list of codes such as "ICE", "DRY") }. A station can
+// qualifier (null or a list of codes such as "ICE", "DRY"; a number may come
+// with a code that invalidates it), approval_status }. A station can
 // have several series of one parameter (a sensor replaced in 2019, two
 // depths): the choice is made by `selectSeries`.
 // -----------------------------------------------------------------------------
@@ -32,6 +33,7 @@ const VALUE_PROPERTIES = [
   'value',
   'unit_of_measure',
   'qualifier',
+  'approval_status',
 ];
 
 /** The URL of the latest values of these stations (one request for all of them). */
@@ -165,15 +167,58 @@ export const BOUNDS = {
   'water-temperature': [-5, 50],
 };
 
-/** A qualifier code: upper-case letters, digits, `_`, at most 24 characters. */
-function qualifiers(list) {
-  if (!Array.isArray(list)) return [];
-  const out = [];
-  for (const item of list.slice(0, 8)) {
+/**
+ * The qualifier codes the USGS sends with a value (seen on the real service,
+ * every series of the four parameters, 2026-10-30: test/fixtures/qualifiers.json).
+ * Those that only NUANCE a value: the value is a measurement, published, and
+ * the status says the code. Every other code (DRY, ICE, EQUIP, MAINT, UNAVAIL,
+ * TEST, DISCONTINUED, SEASONAL, FLOOD, DAMFAILURE, ZEROFLOW, LESSTHAN,
+ * GREATERTHAN, BLWMIN, GHNOTASSCPKQ, and any code not listed here) INVALIDATES
+ * it: never published, the status says why. A bound ("less than", "below the
+ * minimum") is not a measurement; a dry well's number is the depth of its
+ * sensor, not of water; an unknown code is taken as the worst.
+ */
+export const NUANCING = new Set([
+  'ESTIMATED',
+  'REVISED',
+  'BACKWATER',
+  'REGULATED',
+  'DEBRIS',
+  'DIFFDATUM',
+  'RATINGDEV',
+  'TIDE',
+  'URBAN',
+  'OTHERAGENCY',
+  'OPPORTUNISTIC',
+  'FORCEINTERPOLATION',
+]);
+
+/**
+ * The qualifier field (a list of codes, or one code as a plain string) ->
+ * { codes (upper-case letters, digits and `_`, at most 24 characters, 8 at
+ * most), blocked: whether any entry, readable or not, invalidates the value }.
+ */
+export function qualifiersOf(field) {
+  const none =
+    field === null || field === undefined || (typeof field === 'string' && !field.trim());
+  if (none) return { codes: [], blocked: false };
+  const list = typeof field === 'string' ? [field] : Array.isArray(field) ? field : undefined;
+  // Neither a list nor a code (a number, an object): no proof the value is good.
+  if (!list) return { codes: [], blocked: true };
+  const codes = [];
+  let blocked = false;
+  for (const item of list.slice(0, 32)) {
     const code = typeof item === 'string' ? item.trim().toUpperCase() : '';
-    if (/^[A-Z0-9_]{1,24}$/.test(code) && !out.includes(code)) out.push(code);
+    if (!/^[A-Z0-9_]{1,24}$/.test(code)) {
+      // An entry that cannot be read is no proof the value is good.
+      blocked = true;
+      continue;
+    }
+    if (!NUANCING.has(code)) blocked = true;
+    if (!codes.includes(code) && codes.length < 8) codes.push(code);
   }
-  return out.slice(0, 4);
+  if (list.length > 32) blocked = true;
+  return { codes, blocked };
 }
 
 const isPlain = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -183,7 +228,10 @@ const isPlain = (value) => Boolean(value) && typeof value === 'object' && !Array
  * @param {string} text the JSON answer
  * @param {Set<string>} asked the station ids asked
  * @returns {{ series: Array<{ station: string, kind: string, tsid: string, time?: number,
- *   value?: number|null, qualifiers: string[] }>, total: number, ignored: number, next?: string }}
+ *   value?: number|null, qualifiers: string[], blocked: boolean, provisional: boolean }>,
+ *   total: number, ignored: number, next?: string }}
+ *   `blocked`: a qualifier invalidates the value (see NUANCING); `provisional`: not
+ *   (yet) approved by the USGS.
  *   `value` in the canonical unit (cfs, ft, °C); undefined when unreadable (unknown
  *   unit, a text, out of range), null when the source gives none.
  * Throws a FormatError when the envelope is not a feature collection.
@@ -235,7 +283,8 @@ export function parseLatest(text, asked) {
       tsid,
       time: parseInstant(p.time),
       value,
-      qualifiers: qualifiers(p.qualifier),
+      ...(({ codes, blocked }) => ({ qualifiers: codes, blocked }))(qualifiersOf(p.qualifier)),
+      provisional: p.approval_status !== 'Approved',
     });
   }
   return { series, total: body.features.length, ignored, next: nextLink(body) };
@@ -251,46 +300,60 @@ function nextLink(body) {
 
 /**
  * Picks the series to show for one station and one kind, at `ref` (epoch ms,
- * the time of the source): among the current ones with a value, the one of
- * smallest series id (stable from one read to the next: two sensors never
- * alternate); else a current one without value (its qualifiers say why);
- * else the latest one (stale).
+ * the time of the source): among the current ones with a value no qualifier
+ * invalidates, the one of smallest series id (the same one from read to read
+ * while it stays current); else a current one without value, or whose value a
+ * qualifier invalidates (its qualifiers say why); else the latest one (stale).
  * @returns {{ state: 'fresh'|'novalue'|'stale'|'unreadable', series?: object }}
  */
 export function selectSeries(list, ref, maxAge, futureSlack) {
   const dated = list.filter((s) => s.time !== undefined && s.time - ref <= futureSlack);
   const current = dated.filter((s) => ref - s.time <= maxAge);
   const fresh = current
-    .filter((s) => typeof s.value === 'number')
+    .filter((s) => typeof s.value === 'number' && !s.blocked)
     .sort((a, b) => (a.tsid < b.tsid ? -1 : a.tsid > b.tsid ? 1 : 0));
   if (fresh.length > 0) return { state: 'fresh', series: fresh[0] };
   const latest = (items) => items.reduce((a, b) => (b.time > a.time ? b : a));
-  const empty = current.filter((s) => s.value === null);
+  const empty = current.filter((s) => s.value === null || s.blocked);
   if (empty.length > 0) return { state: 'novalue', series: latest(empty) };
   if (current.length > 0) return { state: 'unreadable', series: latest(current) };
   if (dated.length > 0) return { state: 'stale', series: latest(dated) };
   return { state: 'unreadable' };
 }
 
-/** USGS time zone abbreviation and daylight saving flag -> an IANA zone (UTC when unknown). */
+/**
+ * USGS time zone abbreviation and daylight saving flag -> an IANA zone (UTC
+ * when unknown). The flag of the USGS is wrong for many stations (EST "N" for
+ * most of Florida, 2026-10-30): every U.S. zone follows daylight saving time
+ * but Arizona (MST "N"), Hawaii, Puerto Rico and the Pacific territories, so
+ * the flag is only used to tell Arizona from the rest of the Mountain zone.
+ * `ZP-11` (American Samoa) and the other `ZP±hh` are fixed offsets.
+ */
 const ZONES = new Map([
-  ['EST', ['America/New_York', 'Etc/GMT+5']],
-  ['CST', ['America/Chicago', 'Etc/GMT+6']],
+  ['EST', ['America/New_York', 'America/New_York']],
+  ['CST', ['America/Chicago', 'America/Chicago']],
   ['MST', ['America/Denver', 'America/Phoenix']],
-  ['PST', ['America/Los_Angeles', 'Etc/GMT+8']],
-  ['AKST', ['America/Anchorage', 'Etc/GMT+9']],
+  ['PST', ['America/Los_Angeles', 'America/Los_Angeles']],
+  ['AKST', ['America/Anchorage', 'America/Anchorage']],
   ['HST', ['Pacific/Honolulu', 'Pacific/Honolulu']],
-  ['AST', ['America/Halifax', 'America/Puerto_Rico']],
+  ['AST', ['America/Puerto_Rico', 'America/Puerto_Rico']],
   ['CHST', ['Pacific/Guam', 'Pacific/Guam']],
   ['GST', ['Pacific/Guam', 'Pacific/Guam']],
   ['SST', ['Pacific/Pago_Pago', 'Pacific/Pago_Pago']],
+  ['ZP-11', ['Pacific/Pago_Pago', 'Pacific/Pago_Pago']],
   ['UTC', ['UTC', 'UTC']],
 ]);
 
 export function zoneOf(abbreviation, dst) {
-  const pair = ZONES.get(typeof abbreviation === 'string' ? abbreviation.trim().toUpperCase() : '');
-  if (!pair) return 'UTC';
-  return dst === 'N' ? pair[1] : pair[0];
+  const key = typeof abbreviation === 'string' ? abbreviation.trim().toUpperCase() : '';
+  const pair = ZONES.get(key);
+  if (pair) return dst === 'N' ? pair[1] : pair[0];
+  // Another fixed offset: ZP-10 is UTC-10, i.e. Etc/GMT+10 (the sign is reversed).
+  const fixed = /^ZP([+-])(\d{1,2})$/.exec(key);
+  if (fixed && Number(fixed[2]) >= 1 && Number(fixed[2]) <= 12) {
+    return `Etc/GMT${fixed[1] === '-' ? '+' : '-'}${Number(fixed[2])}`;
+  }
+  return 'UTC';
 }
 
 /**

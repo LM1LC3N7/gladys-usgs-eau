@@ -114,7 +114,10 @@ export function createMemoryStore(initial = {}) {
       store.absent = false;
       data = structuredClone(next);
     },
+    /** A promise to await before setAside resolves (a slow /data). */
+    holdAside: undefined,
     async setAside() {
+      if (store.holdAside) await store.holdAside;
       if (store.failAside) throw Object.assign(new Error('read-only'), { code: 'EROFS' });
       store.asides += 1;
       store.broken = false;

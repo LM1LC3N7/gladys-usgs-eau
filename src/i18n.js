@@ -52,31 +52,50 @@ const KIND_NAMES = {
   },
 };
 
-/** The qualifier codes of the USGS a person can read; any other is shown as its code. */
-const QUALIFIERS = {
-  ICE: { en: 'ice', fr: 'glace' },
-  DRY: { en: 'dry', fr: 'à sec' },
-  EQUIPMENT: { en: 'equipment malfunction', fr: "panne d'équipement" },
-  EQP: { en: 'equipment malfunction', fr: "panne d'équipement" },
-  DISCONTINUED: { en: 'discontinued', fr: 'arrêtée' },
-  FLOOD: { en: 'flood damage', fr: 'dégâts de crue' },
-  FLD: { en: 'flood damage', fr: 'dégâts de crue' },
-  ESTIMATED: { en: 'estimated', fr: 'estimée' },
-  BACKWATER: { en: 'backwater', fr: 'remous' },
-  ZEROFLOW: { en: 'zero flow', fr: 'débit nul' },
-  ZFL: { en: 'zero flow', fr: 'débit nul' },
-  MAINTENANCE: { en: 'maintenance', fr: 'maintenance' },
-  MNT: { en: 'maintenance', fr: 'maintenance' },
-  SEASONAL: { en: 'seasonal', fr: 'saisonnière' },
-  SSN: { en: 'seasonal', fr: 'saisonnière' },
-};
+/**
+ * The qualifier codes of the USGS, as the real service sends them (every one
+ * seen on 2026-10-30, test/fixtures/qualifiers.json); any other is shown as
+ * its code.
+ */
+const QUALIFIERS = new Map([
+  ['BACKWATER', { en: 'backwater', fr: 'remous' }],
+  ['BLWMIN', { en: 'below the minimum measurable', fr: 'sous le minimum mesurable' }],
+  ['DAMFAILURE', { en: 'dam failure', fr: 'rupture de barrage' }],
+  ['DEBRIS', { en: 'debris', fr: 'débris' }],
+  ['DIFFDATUM', { en: 'other datum', fr: 'autre référence de niveau' }],
+  ['DISCONTINUED', { en: 'discontinued', fr: 'arrêtée' }],
+  ['DRY', { en: 'dry', fr: 'à sec' }],
+  ['EQUIP', { en: 'equipment malfunction', fr: "panne d'équipement" }],
+  ['ESTIMATED', { en: 'estimated', fr: 'estimée' }],
+  ['FLOOD', { en: 'flood damage', fr: 'dégâts de crue' }],
+  ['FORCEINTERPOLATION', { en: 'interpolated', fr: 'interpolée' }],
+  [
+    'GHNOTASSCPKQ',
+    { en: 'gage height not tied to the peak flow', fr: 'hauteur non liée au débit de pointe' },
+  ],
+  ['GREATERTHAN', { en: 'greater than the value', fr: 'supérieure à la valeur' }],
+  ['ICE', { en: 'ice', fr: 'glace' }],
+  ['LESSTHAN', { en: 'less than the value', fr: 'inférieure à la valeur' }],
+  ['MAINT', { en: 'maintenance', fr: 'maintenance' }],
+  ['OPPORTUNISTIC', { en: 'occasional measurement', fr: 'mesure ponctuelle' }],
+  ['OTHERAGENCY', { en: 'from another agency', fr: "d'une autre agence" }],
+  ['RATINGDEV', { en: 'rating being developed', fr: 'courbe de tarage en cours' }],
+  ['REGULATED', { en: 'regulated', fr: 'régulé' }],
+  ['REVISED', { en: 'revised', fr: 'révisée' }],
+  ['SEASONAL', { en: 'off season', fr: 'hors saison' }],
+  ['TEST', { en: 'test', fr: 'test' }],
+  ['TIDE', { en: 'tide', fr: 'marée' }],
+  ['UNAVAIL', { en: 'unavailable', fr: 'indisponible' }],
+  ['URBAN', { en: 'urban influence', fr: 'influence urbaine' }],
+  ['ZEROFLOW', { en: 'zero flow', fr: 'débit nul' }],
+]);
+
+export const QUALIFIER_CODES = [...QUALIFIERS.keys()];
 
 export function qualifierText(language, codes) {
   if (!codes || codes.length === 0)
     return language === 'fr' ? 'sans raison donnée' : 'no reason given';
-  return codes
-    .map((code) => (Object.hasOwn(QUALIFIERS, code) ? QUALIFIERS[code][language] : code))
-    .join(', ');
+  return codes.map((code) => QUALIFIERS.get(code)?.[language] ?? code).join(', ');
 }
 
 const formatters = new Map();
@@ -108,14 +127,25 @@ export function stationTime(language, at, zone) {
  */
 export function deviceStatus(language, view) {
   const fr = language === 'fr';
+  const lang = fr ? 'fr' : 'en';
   const t = view.time === undefined ? '' : stationTime(language, view.time, view.zone);
-  const kinds = (view.behind ?? []).map((k) => KIND_NAMES[fr ? 'fr' : 'en'][k]).join(', ');
+  const kinds = (view.behind ?? [])
+    .map(({ kind, qualifiers }) =>
+      qualifiers.length > 0
+        ? `${KIND_NAMES[lang][kind]} (${qualifierText(lang, qualifiers)})`
+        : KIND_NAMES[lang][kind],
+    )
+    .join(', ');
+  // What the USGS says of the values published: estimated, revised... and provisional.
+  const notes = (view.flags ?? []).map((code) => qualifierText(lang, [code]));
+  if (view.provisional) notes.push(fr ? 'provisoire' : 'provisional');
+  const flags = notes.length > 0 ? ` (${notes.join(', ')})` : '';
   switch (view.code) {
     case 'ok':
       return bound(
         fr
-          ? `Mesuré le ${t}${kinds ? ` ; pas à jour : ${kinds}` : ''}`
-          : `Measured ${t}${kinds ? `; not current: ${kinds}` : ''}`,
+          ? `Mesuré le ${t}${flags}${kinds ? ` ; pas à jour : ${kinds}` : ''}`
+          : `Measured ${t}${flags}${kinds ? `; not current: ${kinds}` : ''}`,
       );
     case 'novalue':
       return bound(
@@ -205,6 +235,12 @@ export const T = {
   },
   paused: (outcome, until) => {
     const why = failureText(outcome);
+    if (outcome.code === 'server') {
+      return {
+        en: `The USGS is unavailable (${why.en}): reads paused until ${clock('en', until)}; nothing new meanwhile.`,
+        fr: `L'USGS est indisponible (${why.fr}) : lectures en pause jusqu'à ${clock('fr', until)} ; rien de nouveau d'ici là.`,
+      };
+    }
     return {
       en: `The USGS asked to slow down (${why.en}): paused until ${clock('en', until)}; nothing new meanwhile.`,
       fr: `L'USGS a demandé de ralentir (${why.fr}) : en pause jusqu'à ${clock('fr', until)} ; rien de nouveau d'ici là.`,
@@ -217,6 +253,10 @@ export const T = {
       fr: `Noms des stations non lus (${why.fr}) : numéros affichés, heures en UTC.`,
     };
   },
+  flagged: (n) => ({
+    en: `${n} station(s) with values the USGS qualifies (estimated, revised...): see their status.`,
+    fr: `${n} station(s) dont l'USGS qualifie les valeurs (estimées, révisées…) : voir leur état.`,
+  }),
   unknown: (n) => ({
     en: `${n} station(s) unknown to the USGS.`,
     fr: `${n} station(s) inconnue(s) de l'USGS.`,

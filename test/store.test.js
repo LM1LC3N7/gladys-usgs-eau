@@ -79,7 +79,7 @@ test('what /data keeps: no personal data, bounded, nothing secret', async () => 
     'stations',
     'v',
   ]);
-  assert.equal(data.stations.length, 6);
+  assert.equal(data.stations.length, 10);
   assert.deepEqual(data.stations[0], {
     id: 'USGS-01646500',
     name: 'POTOMAC RIVER NEAR WASH, DC LITTLE FALLS PUMP STA',

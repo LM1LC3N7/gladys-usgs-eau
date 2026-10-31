@@ -5,7 +5,10 @@
 // -----------------------------------------------------------------------------
 
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+
+const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 import { createServer } from 'node:http';
 import { FetchError, getText, parseRetryAfter } from '../src/http.js';
 
@@ -48,7 +51,9 @@ test('a GET with an honest User-Agent and Accept, no cookie, no conditional head
   assert.equal(seen[0].method, 'GET');
   assert.match(
     seen[0].headers['user-agent'],
-    /^gladys-usgs-eau\/0\.1\.0 \(\+https:\/\/github\.com\/LM1LC3N7\/gladys-usgs-eau\)$/,
+    new RegExp(
+      `^gladys-usgs-eau/${PKG.version.replaceAll('.', '\\.')} \\(\\+https://github\\.com/LM1LC3N7/gladys-usgs-eau\\)$`,
+    ),
   );
   assert.equal(seen[0].headers.accept, 'text/csv');
   assert.equal(seen[1].headers.cookie, undefined);
@@ -170,7 +175,9 @@ test('a declared length above the cap is refused before any byte is read', async
   assert.ok(performance.now() - started < 1000);
 });
 
-test('Retry-After: more than 7 digits of seconds is not a delay', () => {
+test('Retry-After: any number of seconds is a delay (capped by the caller), never ignored', () => {
   assert.equal(parseRetryAfter('1234567'), 1_234_567_000);
-  assert.equal(parseRetryAfter('12345678'), undefined);
+  assert.equal(parseRetryAfter('12345678'), 12_345_678_000);
+  assert.equal(parseRetryAfter('123456789012'), 123_456_789_012_000);
+  assert.equal(parseRetryAfter('9'.repeat(40)), Number.MAX_SAFE_INTEGER);
 });

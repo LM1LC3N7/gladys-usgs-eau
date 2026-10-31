@@ -8,8 +8,12 @@
 
 ## To watch on the real service
 
-- [ ] The qualifier codes of `latest-continuous`: `DRY`, `DISCONTINUED`, `ICE`,
-      `ESTIMATED` seen or documented; the others are shown as their code.
+- [ ] The qualifier codes of `latest-continuous`: the 27 sent on 2026-10-30
+      (`test/fixtures/qualifiers.json`) are classified; a new code blocks the
+      value (shown as its code) until it is classified here.
+- [ ] Parameters not read: 00061 (measured discharge, no continuous series on
+      2026-10-30), 62614 (lake and reservoir elevation, 334 current series):
+      a later version if users ask.
 - [ ] The units of `unit_of_measure`: `ft^3/s`, `ft`, `degC` seen; `m^3/s`,
       `m`, `degF` accepted by guess; anything else is unreadable (status).
 - [ ] The anonymous rate limit of api.data.gov for this API (not published;
@@ -18,7 +22,33 @@
 
 ## Decisions
 
-- Version 0.1.0 set by hand (package.json, lock, manifest, `docker_image`).
+- Version 0.1.0 set by hand (package.json, lock, manifest, `docker_image`); the
+  code reads it from package.json at run time (review r1, I2; as
+  gladys-attente-frontiere 2ca7728), test/version.test.js checks a copy at
+  9.8.7.
+- Qualifiers (review r1, I1/I3): table from the real service (all series of
+  the 4 parameters with a qualifier, 2026-10-30, 27 codes). Nuancing (value
+  published, code in the status): ESTIMATED, REVISED, BACKWATER, REGULATED,
+  DEBRIS, DIFFDATUM, RATINGDEV, TIDE, URBAN, OTHERAGENCY, OPPORTUNISTIC,
+  FORCEINTERPOLATION. Everything else blocks the value, unknown codes and
+  unreadable entries included. LESSTHAN and GREATERTHAN block (a bound is not
+  a measurement; the reviewer's list), although the coordinator's summary
+  named LESSTHAN as nuancing: to confirm with Louis. ZEROFLOW blocks like DRY
+  (Louis's choice for DRY 0.00: "à sec" without a 0). A qualifier sent as a
+  plain string is read. `approval_status` other than Approved: "provisional"
+  in the status; the connection status counts the stations with nuanced
+  values.
+- Parameter 30208 (discharge in m³/s, 5 stations current) read into the same
+  discharge feature (review r1, m5).
+- Time zones (review r1, m1): the daylight saving flag of the USGS is only
+  used for MST (Arizona); EST/CST/PST/AKST always follow DST (Florida says
+  "N" wrongly); `ZP-11` -> Pacific/Pago_Pago, other `ZP±hh` -> Etc/GMT.
+- Retry-After of any digit count (review r1, m2): 12 digits read, more = the
+  cap; the pause is capped at 6 h.
+- The process exits 15 s after SIGTERM/SIGINT at the latest, whatever hangs
+  (review r1, s05): a timer in the shutdown handler (src/wire.js).
+- A date of the last read in /data before 2020 (negative, 0) is invalid: first
+  read one interval after the start (review r1, s05 "date negative").
 - SDK `^0.16.0` (the template's; the latest published, checked on the
   registry on 2026-10-30). No other runtime dependency.
 - Manifest: `categories: ["environment"]` (open-data daily-life feeds, §3 of
@@ -92,6 +122,11 @@
   read again a minute after it (a round is never lost); a read cut after its
   values (during the publication) is not. A wake-up that finds a read or a
   refresh running is armed again as soon as it ends (a minute at the latest).
+- Review r1, I4: tests for A11 (starts queued: a slow set-aside with two
+  saves), A53 (stop aborts the request), A58 (budget counted before the send),
+  A37 (a refused batch never restores a mark cleared meanwhile), A36 (batches
+  of 100), A57 (marks capped at 400), C3 (200 entries read). The reviewer's
+  117 mutants replayed: all killed but S2 (equivalent, agreed in r1).
 - Mutation: about 165 mutants of the guards (app, usgs, config, devices, http,
   i18n, store) in a directory of my own, all killed by a test but one
   equivalent: the size check before reading /data (`store.js`, S2: the read

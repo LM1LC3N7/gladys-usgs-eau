@@ -103,3 +103,10 @@ test('numbers typed: only plain digits, never hexadecimal nor exponent', () => {
     assert.deepEqual(config.notes, ['interval'], typed);
   }
 });
+
+test('the station field reads 200 entries at most (an invalid one beyond is not seen)', () => {
+  const parsed = parseStations(`${'01646500 '.repeat(200)}x`);
+  assert.equal(parsed.invalid, 0);
+  assert.equal(parsed.cut, true);
+  assert.deepEqual(parsed.ids, ['USGS-01646500']);
+});

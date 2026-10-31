@@ -15,8 +15,8 @@ export const SELECTOR = 'ue';
 export const SECOND = 1000;
 export const MINUTE = 60 * SECOND;
 export const HOUR = 60 * MINUTE;
-/** 2026-10-30 06:06 UTC: half a minute after the real captures. */
-export const NOW = Date.UTC(2026, 9, 30, 6, 6);
+/** 2026-10-30 11:45 UTC: under a minute after the real captures. */
+export const NOW = Date.UTC(2026, 9, 30, 11, 45);
 export const BASE = 'https://usgs.test/ogcapi/v1';
 export const F = (id, key) => `ext:${SELECTOR}:station:${id}:${key}`;
 export const D = (id) => `ext:${SELECTOR}:station:${id}`;
@@ -26,7 +26,7 @@ export const fixture = (name) =>
 
 /** The stations of the real captures. */
 export const REAL_STATIONS =
-  '01646500, 09380000, 12113000, 354144078460101, 405118099514901, 00000000';
+  '01646500, 09380000, 12113000, 354144078460101, 405118099514901, 00000000, 07105900, 11157500, 07076750, 04159130';
 
 // --- Builders ------------------------------------------------------------------------
 
@@ -43,6 +43,7 @@ export function series({
   qualifier = null,
   tsid,
   statistic = '00011',
+  approval = 'Approved',
 }) {
   tsSeq += 1;
   return {
@@ -56,6 +57,7 @@ export function series({
       value,
       unit_of_measure: unit,
       qualifier,
+      approval_status: approval,
     },
     id: `f${tsSeq}`,
     geometry: null,
@@ -124,6 +126,7 @@ export function createSource(clock, world = {}) {
       url: String(url),
       at: clock.monotonic(),
       headers: init?.headers,
+      signal: init?.signal,
     });
     let answer = await source.world[route]?.(String(url), init);
     if (answer === 'hang') {
@@ -143,7 +146,7 @@ export function createSource(clock, world = {}) {
   return source;
 }
 
-/** The real captures, as the USGS answered at 06:05 UTC. */
+/** The real captures, as the USGS answered at 11:44 UTC. */
 export const realWorld = () => ({
   latest: () => fixture('latest-continuous.json'),
   locations: () => fixture('monitoring-locations.json'),

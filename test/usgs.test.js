@@ -16,14 +16,21 @@ import {
   parseLatest,
   parseLocations,
   parseValue,
+  qualifiersOf,
+  NUANCING,
   searchUrl,
   searchWords,
   selectSeries,
   zoneOf,
 } from '../src/usgs.js';
+import { QUALIFIER_CODES } from '../src/i18n.js';
 import { BASE, fixture, latestBody, series } from './helpers/app.js';
 
 const REAL = new Set([
+  'USGS-07105900',
+  'USGS-11157500',
+  'USGS-07076750',
+  'USGS-04159130',
   'USGS-01646500',
   'USGS-09380000',
   'USGS-12113000',
@@ -33,7 +40,7 @@ const REAL = new Set([
 ]);
 const parse = (features, asked = new Set(['USGS-01646500'])) =>
   parseLatest(JSON.stringify(latestBody(features)), asked);
-const AT = Date.UTC(2026, 9, 30, 5, 50);
+const AT = Date.UTC(2026, 9, 30, 10, 50);
 
 test('the real capture: every series of the stations asked, values in the canonical units', () => {
   const {
@@ -42,7 +49,7 @@ test('the real capture: every series of the stations asked, values in the canoni
     ignored,
     next,
   } = parseLatest(fixture('latest-continuous.json'), REAL);
-  assert.equal(total, 14);
+  assert.equal(total, 24);
   assert.equal(ignored, 0);
   assert.equal(next, undefined);
   const potomac = list.filter((s) => s.station === 'USGS-01646500');
@@ -56,17 +63,37 @@ test('the real capture: every series of the stations asked, values in the canoni
     'water-temperature',
   ]);
   const flow = potomac.find((s) => s.kind === 'discharge');
-  assert.equal(flow.value, 2450);
+  assert.equal(flow.value, 2400);
   assert.equal(flow.time, AT);
+  assert.equal(flow.provisional, true);
+  assert.equal(flow.blocked, false);
+  assert.equal(potomac.find((s) => s.time < AT).provisional, false, 'the 2019 series are approved');
   const dry = list.find((s) => s.station === 'USGS-354144078460101');
   assert.equal(dry.value, null);
   assert.deepEqual(dry.qualifiers, ['DRY']);
   assert.equal(dry.kind, 'groundwater-depth');
+  // A dry stream gauge with a number (0.00): the number is kept, the code blocks it.
+  const dryFlow = list.find((s) => s.station === 'USGS-11157500' && s.kind === 'discharge');
+  assert.equal(dryFlow.value, 0);
+  assert.equal(dryFlow.blocked, true);
+  const below = list.find((s) => s.station === 'USGS-07076750' && s.kind === 'discharge');
+  assert.equal(below.value, 7620);
+  assert.deepEqual(below.qualifiers, ['BLWMIN']);
+  assert.equal(below.blocked, true);
+  const estimated = list.find((s) => s.station === 'USGS-07105900' && s.kind === 'discharge');
+  assert.deepEqual(estimated.qualifiers, ['ESTIMATED']);
+  assert.equal(estimated.blocked, false);
+  // Discharge in m³/s (parameter 30208), converted to ft³/s.
+  const cms = list.filter((s) => s.station === 'USGS-04159130' && s.kind === 'discharge');
+  assert.deepEqual(
+    cms.map((s) => Math.round(s.value)).sort((a, b) => a - b),
+    [205531, 206000],
+  );
 });
 
-test('the real capture of the locations: names, zones (with and without daylight saving)', () => {
+test('the real capture of the locations: names, zones (the daylight saving flag of the USGS is not trusted)', () => {
   const { locations } = parseLocations(fixture('monitoring-locations.json'));
-  assert.equal(locations.size, 6);
+  assert.equal(locations.size, 10);
   assert.equal(
     locations.get('USGS-01646500').name,
     'POTOMAC RIVER NEAR WASH, DC LITTLE FALLS PUMP STA',
@@ -75,6 +102,8 @@ test('the real capture of the locations: names, zones (with and without daylight
   assert.equal(locations.get('USGS-09380000').zone, 'America/Phoenix');
   assert.equal(locations.get('USGS-12113000').zone, 'America/Los_Angeles');
   assert.equal(locations.get('USGS-405118099514901').zone, 'America/Chicago');
+  // Port Huron, Michigan: "EST, no daylight saving" for the USGS; Michigan follows it.
+  assert.equal(locations.get('USGS-04159130').zone, 'America/New_York');
   assert.equal(locations.get('USGS-354144078460101').siteType, 'Well');
 });
 
@@ -108,6 +137,7 @@ test('a value is a plain decimal or a number; a text, an empty string, NaN are n
 });
 
 test('an instant needs a date, a time and an offset; impossible dates are refused', () => {
+  const AT = Date.UTC(2026, 9, 30, 5, 50);
   assert.equal(parseInstant('2026-10-30T05:50:00+00:00'), AT);
   assert.equal(parseInstant('2026-10-30T01:50:00-04:00'), AT);
   assert.equal(parseInstant('2026-10-30T05:50Z'), AT);
@@ -233,7 +263,7 @@ test('the next link: absent, present, or invalid', () => {
   );
 });
 
-test('qualifiers: codes only, upper-cased, bounded', () => {
+test('qualifiers: codes only, upper-cased, bounded; a plain string is a code', () => {
   const [s] = parse([
     series({
       at: AT,
@@ -241,8 +271,85 @@ test('qualifiers: codes only, upper-cased, bounded', () => {
       qualifier: ['ice', 'DRY', 'DRY', 'bad code', 'x'.repeat(25), 3, 'A', 'B', 'C'],
     }),
   ]).series;
-  assert.deepEqual(s.qualifiers, ['ICE', 'DRY', 'A', 'B']);
-  assert.deepEqual(parse([series({ at: AT, qualifier: 'ICE' })]).series[0].qualifiers, []);
+  assert.deepEqual(s.qualifiers, ['ICE', 'DRY', 'A', 'B', 'C']);
+  assert.equal(s.blocked, true);
+  const [one] = parse([series({ at: AT, qualifier: 'Ice' })]).series;
+  assert.deepEqual(one.qualifiers, ['ICE']);
+  assert.equal(one.blocked, true);
+});
+
+test('qualifiersOf: the codes that only nuance a value never block it; anything else does', () => {
+  assert.deepEqual(qualifiersOf(null), { codes: [], blocked: false });
+  assert.deepEqual(qualifiersOf(undefined), { codes: [], blocked: false });
+  assert.deepEqual(qualifiersOf([]), { codes: [], blocked: false });
+  assert.deepEqual(qualifiersOf(' '), { codes: [], blocked: false });
+  assert.deepEqual(qualifiersOf('ESTIMATED'), { codes: ['ESTIMATED'], blocked: false });
+  assert.deepEqual(qualifiersOf(['ESTIMATED', 'REVISED']), {
+    codes: ['ESTIMATED', 'REVISED'],
+    blocked: false,
+  });
+  for (const code of [
+    'DRY',
+    'ICE',
+    'EQUIP',
+    'MAINT',
+    'UNAVAIL',
+    'TEST',
+    'DISCONTINUED',
+    'SEASONAL',
+    'FLOOD',
+    'DAMFAILURE',
+    'ZEROFLOW',
+    'LESSTHAN',
+    'GREATERTHAN',
+    'BLWMIN',
+    'GHNOTASSCPKQ',
+    'NEWCODE',
+  ]) {
+    assert.equal(qualifiersOf([code]).blocked, true, code);
+    assert.equal(qualifiersOf(['ESTIMATED', code]).blocked, true, code);
+  }
+  for (const code of NUANCING) assert.equal(qualifiersOf([code]).blocked, false, code);
+  // An entry that cannot be read, a number, an object: no proof the value is good.
+  assert.equal(qualifiersOf(['ESTIMATED', 'bad code']).blocked, true);
+  assert.equal(qualifiersOf(['ESTIMATED', 3]).blocked, true);
+  assert.equal(qualifiersOf(3).blocked, true);
+  assert.equal(qualifiersOf({ code: 'ESTIMATED' }).blocked, true);
+  // Beyond 32 entries: not read, blocked.
+  assert.equal(qualifiersOf(Array(33).fill('ESTIMATED')).blocked, true);
+  assert.equal(qualifiersOf(Array(32).fill('ESTIMATED')).blocked, false);
+  // A blocking code after the 8 kept is still seen.
+  const many = [...'ABCDEFGH'].map((c) => `R${c}`);
+  assert.equal(qualifiersOf([...NUANCING].slice(0, 9).concat(['DRY'])).blocked, true);
+  assert.equal(qualifiersOf(many).codes.length, 8);
+});
+
+test('every code the real service sends is classified on purpose and has a text', () => {
+  const { combinations } = JSON.parse(fixture('qualifiers.json'));
+  const codes = new Set(Object.keys(combinations).flatMap((k) => k.split('|')[0].split('+')));
+  assert.equal(codes.size, 27);
+  const blocking = new Set([
+    'BLWMIN',
+    'DAMFAILURE',
+    'DISCONTINUED',
+    'DRY',
+    'EQUIP',
+    'FLOOD',
+    'GHNOTASSCPKQ',
+    'GREATERTHAN',
+    'ICE',
+    'LESSTHAN',
+    'MAINT',
+    'SEASONAL',
+    'TEST',
+    'UNAVAIL',
+    'ZEROFLOW',
+  ]);
+  for (const code of codes) {
+    assert.ok(QUALIFIER_CODES.includes(code), `${code} has a text`);
+    assert.equal(qualifiersOf([code]).blocked, blocking.has(code), code);
+  }
+  assert.equal(blocking.size + NUANCING.size, codes.size);
 });
 
 test('selectSeries: the current one of smallest id; else a current one without value; else the latest', () => {
@@ -285,18 +392,29 @@ test('selectSeries: the current one of smallest id; else a current one without v
 
 test('zones: abbreviation and daylight saving -> IANA, unknown -> UTC', () => {
   assert.equal(zoneOf('EST', 'Y'), 'America/New_York');
-  assert.equal(zoneOf('EST', 'N'), 'Etc/GMT+5');
+  assert.equal(zoneOf('EST', 'N'), 'America/New_York', 'Florida, Michigan: the flag is wrong');
+  assert.equal(zoneOf('CST', 'N'), 'America/Chicago');
+  assert.equal(zoneOf('PST', 'N'), 'America/Los_Angeles');
+  assert.equal(zoneOf('AKST', 'Y'), 'America/Anchorage');
+  assert.equal(zoneOf('AST', 'N'), 'America/Puerto_Rico');
+  assert.equal(zoneOf('GST', 'N'), 'Pacific/Guam');
+  assert.equal(zoneOf('ZP-11', 'N'), 'Pacific/Pago_Pago');
+  assert.equal(zoneOf('zp-10', 'N'), 'Etc/GMT+10');
+  assert.equal(zoneOf('ZP+10', 'N'), 'Etc/GMT-10');
+  assert.equal(zoneOf('ZP-13', 'N'), 'UTC');
+  assert.equal(zoneOf('ZP-0', 'N'), 'UTC');
+  assert.equal(zoneOf('MST', 'Y'), 'America/Denver');
   assert.equal(zoneOf('MST', 'N'), 'America/Phoenix');
   assert.equal(zoneOf(' hst ', 'N'), 'Pacific/Honolulu');
   assert.equal(zoneOf('XYZ', 'Y'), 'UTC');
   assert.equal(zoneOf('constructor', 'Y'), 'UTC');
   assert.equal(zoneOf(undefined, 'Y'), 'UTC');
-  for (const zone of ['America/New_York', 'Etc/GMT+5', 'America/Phoenix', 'Pacific/Guam']) {
+  for (const zone of ['America/New_York', 'Etc/GMT+10', 'America/Phoenix', 'Pacific/Pago_Pago']) {
     assert.doesNotThrow(() => new Intl.DateTimeFormat('en-US', { timeZone: zone }));
   }
 });
 
-test('the URLs: one request for all the stations, only the parameters read', () => {
+test('the URLs: one request for all the stations, only the parameters read (30208: discharge in m³/s)', () => {
   const url = new URL(latestUrl(BASE, ['USGS-01646500', 'USGS-09380000']));
   assert.equal(url.origin + url.pathname, `${BASE}/collections/latest-continuous/items`);
   assert.equal(url.searchParams.get('monitoring_location_id'), 'USGS-01646500,USGS-09380000');
@@ -304,6 +422,7 @@ test('the URLs: one request for all the stations, only the parameters read', () 
     '00010',
     '00060',
     '00065',
+    '30208',
     '72019',
   ]);
   assert.equal(url.searchParams.get('limit'), '1000');
@@ -335,11 +454,11 @@ test('cleanText: control characters out, spaces folded, bounded', () => {
   assert.equal(cleanText(3), '');
 });
 
-test('bounds: 4 qualifiers, 200 locations, series ids of safe characters', () => {
+test('bounds: 8 qualifiers, 200 locations, series ids of safe characters', () => {
   const [s] = parse([
-    series({ at: AT, value: null, qualifier: ['A', 'B', 'C', 'D', 'E', 'F'] }),
+    series({ at: AT, value: null, qualifier: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] }),
   ]).series;
-  assert.deepEqual(s.qualifiers, ['A', 'B', 'C', 'D']);
+  assert.deepEqual(s.qualifiers, ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']);
   const ids = parse([
     series({ at: AT, tsid: '../x' }),
     series({ at: AT, tsid: 'a'.repeat(65) }),

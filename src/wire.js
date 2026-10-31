@@ -4,11 +4,13 @@
 // before connect(). Read-only: no command handler.
 // -----------------------------------------------------------------------------
 
+import { SHUTDOWN_LIMIT } from './constants.js';
+
 /**
  * @param {import('@gladysassistant/integration-sdk').GladysIntegration} gladys
  * @param {import('./app.js').WaterApp} app
  */
-export function wire(gladys, app, logger) {
+export function wire(gladys, app, logger, { exit = process.exit, timers = { setTimeout } } = {}) {
   // --- Discovery -----------------------------------------------------------------
   // The stations already read, never a read (the next one comes at its time).
   gladys.onScanRequest(() => app.scan());
@@ -39,5 +41,12 @@ export function wire(gladys, app, logger) {
   gladys.on('disconnected', () => {
     app.disconnected().catch((err) => logger.error(`Stop failed (${err?.name ?? 'Error'})`));
   });
-  gladys.handleShutdown(() => app.stop());
+  // The supervisor stops the container: the app stops (bounded), then the SDK
+  // disconnects and exits. Whatever hangs (a frozen /data, a Gladys that never
+  // answers), the process exits SHUTDOWN_LIMIT after the signal.
+  gladys.handleShutdown(() => {
+    const timer = timers.setTimeout(() => exit(0), SHUTDOWN_LIMIT);
+    timer?.unref?.();
+    return app.stop();
+  });
 }

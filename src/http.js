@@ -27,7 +27,9 @@ export class FetchError extends Error {
 export function parseRetryAfter(value, serverDate) {
   if (typeof value !== 'string') return undefined;
   const text = value.trim();
-  if (/^\d{1,7}$/.test(text)) return Number(text) * 1000;
+  // Any number of seconds (the caller caps the pause at 6 h); absurdly long digits: the cap.
+  if (/^\d{1,12}$/.test(text)) return Number(text) * 1000;
+  if (/^\d+$/.test(text)) return Number.MAX_SAFE_INTEGER;
   const at = Date.parse(text);
   if (Number.isFinite(at) && Number.isFinite(serverDate)) return Math.max(0, at - serverDate);
   return undefined;

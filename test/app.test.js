@@ -5,8 +5,13 @@
 // -----------------------------------------------------------------------------
 
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+
+const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+import { KINDS, buildDevice } from '../src/devices.js';
 import { createMemoryStore } from '../src/store.js';
+import { settle } from './helpers/clock.js';
 import {
   BASE,
   D,
@@ -26,6 +31,9 @@ import {
 const POTOMAC = 'USGS-01646500';
 const DRY = 'USGS-354144078460101';
 const WELL = 'USGS-405118099514901';
+const DRYFLOW = 'USGS-11157500';
+const BLWMIN = 'USGS-07076750';
+const ESTIMATED = 'USGS-07105900';
 
 test('real captures: one request, Discovery with names and the kinds seen, values once created', async () => {
   const t = await setup({ config: { stations: REAL_STATIONS } });
@@ -35,7 +43,9 @@ test('real captures: one request, Discovery with names and the kinds seen, value
   const headers = t.source.requests[0].headers;
   assert.match(
     headers['User-Agent'],
-    /^gladys-usgs-eau\/0\.1\.0 \(\+https:\/\/github\.com\/LM1LC3N7\//,
+    new RegExp(
+      `^gladys-usgs-eau/${PKG.version.replaceAll('.', '\\.')} \\(\\+https://github\\.com/LM1LC3N7/`,
+    ),
   );
   assert.equal(headers.Accept, 'application/geo+json, application/json;q=0.9');
   const found = t.gladys.fake.discoveredDevices;
@@ -48,6 +58,10 @@ test('real captures: one request, Discovery with names and the kinds seen, value
       'WK-436 CROWDER PARK NR HOLLY SPRINGS NC REGOLITH (USGS-354144078460101)',
       '10N 22W 8BCBB1-Site7-20 (USGS-405118099514901)',
       'SAN MARCIAL ADDED (USGS-00000000)',
+      'JIMMY CAMP CREEK AT FOUNTAIN, CO. (USGS-07105900)',
+      'TRES PINOS C NR TRES PINOS CA (USGS-11157500)',
+      'White River at Georgetown, AR (USGS-07076750)',
+      'ST. CLAIR RIVER AT PORT HURON, MI (USGS-04159130)',
     ],
   );
   const keys = (id) =>
@@ -60,43 +74,57 @@ test('real captures: one request, Discovery with names and the kinds seen, value
   ]);
   assert.deepEqual(keys(DRY), ['status']);
   assert.deepEqual(keys(WELL), ['groundwater-depth-ft', 'status']);
+  // A dry gauge (DRY with 0.00) and a gauge below its minimum (BLWMIN): no feature.
+  assert.deepEqual(keys(DRYFLOW), ['status']);
+  assert.deepEqual(keys(BLWMIN), ['status']);
+  // An estimated discharge is a value (said in the status).
+  assert.deepEqual(keys(ESTIMATED), [
+    'discharge-cfs',
+    'gage-height-ft',
+    'water-temperature-f',
+    'status',
+  ]);
   // Nothing published before a device exists.
   assert.equal(t.gladys.fake.states.length, 0);
-  await t.create(POTOMAC);
-  await t.create(DRY);
-  await t.create(WELL);
+  for (const id of [POTOMAC, DRY, WELL, DRYFLOW, BLWMIN, ESTIMATED, 'USGS-04159130']) {
+    await t.create(id);
+  }
   await t.app.idle();
-  assert.deepEqual(
-    t.statesOf(F(POTOMAC, 'discharge-cfs')).map((s) => s.state),
-    [2450],
+  const values = (id, key) => t.statesOf(F(id, key)).map((s) => s.state);
+  const texts = (id) => t.statesOf(F(id, 'status')).map((s) => s.text);
+  assert.deepEqual(values(POTOMAC, 'discharge-cfs'), [2400]);
+  assert.deepEqual(values(POTOMAC, 'gage-height-ft'), [2.91]);
+  // 15.9 °C = 60.62 °F exactly; the 2019 series of the station are never shown.
+  assert.deepEqual(values(POTOMAC, 'water-temperature-f'), [60.62]);
+  assert.deepEqual(texts(POTOMAC), ['Measured Oct 30, 6:50 AM EDT (provisional)']);
+  assert.deepEqual(texts(DRY), ['No value (dry), Oct 30, 6:45 AM EDT']);
+  assert.deepEqual(values(WELL, 'groundwater-depth-ft'), [8.54]);
+  // DRY 0.00 ft³/s: never a 0; BLWMIN 7620 ft³/s for a gage of 0.12 ft: never published.
+  assert.equal(
+    t.gladys.fake.states.filter(
+      (s) => s.device_feature_external_id.includes(DRYFLOW) && s.state !== undefined,
+    ).length,
+    0,
   );
-  assert.deepEqual(
-    t.statesOf(F(POTOMAC, 'gage-height-ft')).map((s) => s.state),
-    [2.92],
+  assert.deepEqual(texts(DRYFLOW), ['No value (dry), Oct 30, 4:00 AM PDT']);
+  assert.equal(
+    t.gladys.fake.states.filter(
+      (s) => s.device_feature_external_id.includes(BLWMIN) && s.state !== undefined,
+    ).length,
+    0,
   );
-  // 16.2 °C = 61.16 °F exactly; the 2019 series of the station are never shown.
-  assert.deepEqual(
-    t.statesOf(F(POTOMAC, 'water-temperature-f')).map((s) => s.state),
-    [61.16],
-  );
-  assert.deepEqual(
-    t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
-    ['Measured Oct 30, 1:50 AM EDT'],
-  );
-  assert.deepEqual(
-    t.statesOf(F(DRY, 'status')).map((s) => s.text),
-    ['No value (dry), Oct 30, 1:45 AM EDT'],
-  );
-  assert.deepEqual(
-    t.statesOf(F(WELL, 'groundwater-depth-ft')).map((s) => s.state),
-    [8.54],
-  );
+  assert.deepEqual(texts(BLWMIN), ['No value (below the minimum measurable), Oct 30, 6:00 AM CDT']);
+  // ESTIMATED 0.89 ft³/s: published, the status says it.
+  assert.deepEqual(values(ESTIMATED, 'discharge-cfs'), [0.89]);
+  assert.deepEqual(texts(ESTIMATED), ['Measured Oct 30, 4:45 AM MDT (estimated, provisional)']);
+  // Port Huron: EST "without daylight saving" for the USGS, EDT in fact.
+  assert.match(texts('USGS-04159130')[0], /^Measured Oct 30, 7:00 AM EDT/);
   for (const s of t.gladys.fake.states) assert.equal(s.created_at, undefined);
   assert.deepEqual(t.status(), {
     connected: true,
     message: {
-      en: '6 station(s) read, 4 with a current value.',
-      fr: '6 station(s) lue(s), 4 avec une valeur récente.',
+      en: '10 station(s) read, 6 with a current value. 1 station(s) with values the USGS qualifies (estimated, revised...): see their status.',
+      fr: "10 station(s) lue(s), 6 avec une valeur récente. 1 station(s) dont l'USGS qualifie les valeurs (estimées, révisées…) : voir leur état.",
     },
   });
   await t.app.stop();
@@ -108,23 +136,23 @@ test('metric units: exact conversions; °C as the USGS gives it', async () => {
   await t.create(POTOMAC);
   await t.create('USGS-09380000');
   await t.app.idle();
-  // 2450 ft³/s x 0.028316846592 = 69.376274... m³/s; 2.92 ft x 0.3048 = 0.890016 m.
+  // 2400 ft³/s x 0.028316846592 = 67.960431... m³/s; 2.91 ft x 0.3048 = 0.886968 m.
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'discharge-m3s')).map((s) => s.state),
-    [69.3763],
+    [67.9604],
   );
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'gage-height-m')).map((s) => s.state),
-    [0.89],
+    [0.887],
   );
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'water-temperature-c')).map((s) => s.state),
-    [16.2],
+    [15.9],
   );
   // Lees Ferry, Arizona: no daylight saving (MST all year).
   assert.deepEqual(
     t.statesOf(F('USGS-09380000', 'status')).map((s) => s.text),
-    ['Mesuré le 29 oct., 23:00 UTC−7'],
+    ['Mesuré le 30 oct., 04:00 UTC−7 (provisoire)'],
   );
   const device = t.gladys.fake.discoveredDevices.find((d) => d.external_id === D(POTOMAC));
   assert.deepEqual(
@@ -203,7 +231,7 @@ test('a value without number (dry, ice, a text, empty) is never published, never
       series({ station: POTOMAC, param: '00065', at, value: null, qualifier: ['ICE'] }),
       series({ station: 'USGS-09380000', at, value: 'Ice' }),
       series({ station: 'USGS-12113000', at, value: '' }),
-      series({ station: WELL, param: '72019', at, value: null, qualifier: ['EQUIPMENT'] }),
+      series({ station: WELL, param: '72019', at, value: null, qualifier: ['EQUIP'] }),
     ]);
   t.source.world.locations = () => locationsBody([{ id: POTOMAC }]);
   await t.begin();
@@ -217,7 +245,7 @@ test('a value without number (dry, ice, a text, empty) is never published, never
   const text = (id) => t.statesOf(F(id, 'status')).map((s) => s.text);
   assert.deepEqual(text('USGS-09380000'), ['Unreadable value at the source']);
   assert.deepEqual(text('USGS-12113000'), ['Unreadable value at the source']);
-  assert.deepEqual(text(WELL), ['No value (equipment malfunction), Oct 30, 6:01 AM UTC']);
+  assert.deepEqual(text(WELL), ['No value (equipment malfunction), Oct 30, 11:40 AM UTC']);
   assert.equal(t.status().connected, true);
   await t.app.stop();
 });
@@ -232,7 +260,7 @@ test('a stale value is never published; the status says when it was measured', a
   assert.deepEqual(t.statesOf(F(POTOMAC, 'discharge-cfs')), []);
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
-    ['No current value; last one Oct 29, 11:05 PM EDT'],
+    ['No current value; last one Oct 30, 4:44 AM EDT'],
   );
   // The service answers, but nothing is current: never "connected".
   assert.equal(t.status().connected, false);
@@ -279,7 +307,7 @@ test('a value going stale between reads: the status text says it at the next wak
   );
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
-    ['Measured Oct 30, 4:06 AM UTC', 'No current value; last one Oct 30, 4:06 AM UTC'],
+    ['Measured Oct 30, 9:45 AM UTC', 'No current value; last one Oct 30, 9:45 AM UTC'],
   );
   await t.app.stop();
 });
@@ -434,7 +462,7 @@ test('a device created gets the current values at once, without a request; a sta
   assert.deepEqual(u.statesOf(F(POTOMAC, 'discharge-cfs')), []);
   assert.deepEqual(
     u.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
-    ['No current value; last one Oct 30, 3:16 AM UTC'],
+    ['No current value; last one Oct 30, 8:55 AM UTC'],
   );
   await u.app.stop();
 });
@@ -509,7 +537,7 @@ test('the status of a station lists the kinds no longer current', async () => {
   await t.app.idle();
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
-    ['Mesuré le 30 oct., 06:05 UTC', 'Mesuré le 30 oct., 06:20 UTC ; pas à jour : hauteur'],
+    ['Mesuré le 30 oct., 11:44 UTC', 'Mesuré le 30 oct., 11:59 UTC ; pas à jour : hauteur'],
   );
   await t.app.stop();
 });
@@ -571,7 +599,7 @@ test('names not read (secondary endpoint failing): values all the same, ids as n
   assert.equal(t.gladys.fake.discoveredDevices[0].name, 'USGS-01646500');
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
-    ['Measured Oct 30, 6:05 AM UTC'],
+    ['Measured Oct 30, 11:44 AM UTC'],
   );
   assert.equal(t.status().connected, true);
   assert.match(
@@ -649,7 +677,7 @@ test('stale everywhere: the status gives the latest measurement of the station',
   await t.create(POTOMAC);
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
-    ['No current value; last one Oct 30, 2:06 AM UTC'],
+    ['No current value; last one Oct 30, 7:45 AM UTC'],
   );
   await t.app.stop();
 });
@@ -675,6 +703,177 @@ test('a device created again (no delete seen) gets the current values again', as
   assert.deepEqual(
     t.statesOf(F(POTOMAC, 'discharge-cfs')).map((s) => s.state),
     [100, 100],
+  );
+  await t.app.stop();
+});
+
+// --- Review r1 (I4) ---------------------------------------------------------------------------
+
+/** A device of a station with every value feature (both unit systems) and the status. */
+function fullDevice(id) {
+  const fake = {
+    externalIds: (type, sid) => ({
+      device: `ext:ue:${type}:${sid}`,
+      feature: (key) => `ext:ue:${type}:${sid}:${key}`,
+    }),
+  };
+  const us = buildDevice(fake, { id, kinds: KINDS }, { units: 'us', language: 'en' });
+  const metric = buildDevice(fake, { id, kinds: KINDS }, { units: 'metric', language: 'en' });
+  return {
+    ...us,
+    features: [
+      ...us.features,
+      ...metric.features.filter((f) => !f.external_id.endsWith(':status')),
+    ],
+  };
+}
+
+const STATIONS20 = Array.from({ length: 20 }, (_, i) => `USGS-${String(10000000 + i)}`);
+const allKinds = (station, at, value = '10') => [
+  series({ station, param: '00060', at, value }),
+  series({ station, param: '00065', at, value }),
+  series({ station, param: '00010', at, value }),
+  series({ station, param: '72019', at, value }),
+];
+
+test('values go to Gladys in batches of 100 states at most', async () => {
+  const t = await setup({
+    config: { stations: STATIONS20.join(',') },
+    world: {},
+    devices: STATIONS20.map(fullDevice),
+  });
+  t.source.world.latest = () => latestBody(STATIONS20.flatMap((s) => allKinds(s, NOW - MINUTE)));
+  const sizes = [];
+  const publish = t.gladys.publishStates.bind(t.gladys);
+  t.gladys.publishStates = (states) => {
+    sizes.push(states.length);
+    return publish(states);
+  };
+  await t.begin();
+  await t.app.idle();
+  // 20 stations x 8 value features = 160 values: 100 + 60; then 20 status texts.
+  assert.deepEqual(sizes, [100, 60, 20]);
+  await t.app.stop();
+});
+
+test('the budget counts the states before they are sent: a device created in the same minute waits', async () => {
+  const t = await setup({ config: { stations: '01646500 09380000' }, world: {} });
+  let at = NOW - MINUTE;
+  t.source.world.latest = () =>
+    latestBody([...allKinds('USGS-01646500', at), ...allKinds('USGS-09380000', at)]);
+  await t.begin();
+  await t.create('USGS-01646500');
+  at += 15 * MINUTE;
+  await t.wait(15 * MINUTE - 2000);
+  t.app.sentLog.push({ at: t.clock.monotonic(), n: 246 });
+  await t.wait(2000);
+  await t.app.idle();
+  // 4 values sent (246 + 4 = 250), the status put off.
+  assert.equal(t.statesOf(F('USGS-01646500', 'discharge-cfs')).length, 2);
+  await t.create('USGS-09380000');
+  await t.app.idle();
+  assert.deepEqual(t.statesOf(F('USGS-09380000', 'discharge-cfs')), [], 'no budget left');
+  await t.app.stop();
+});
+
+test('a refused batch never restores a mark someone cleared meanwhile (device deleted)', async () => {
+  const t = await setup({ config: { stations: '01646500' }, world: {} });
+  let at = NOW - MINUTE;
+  t.source.world.latest = () => latestBody([series({ at })]);
+  await t.begin();
+  await t.create(POTOMAC);
+  const fid = F(POTOMAC, 'discharge-cfs');
+  assert.equal(t.app.published.get(fid), NOW - MINUTE);
+  let refuse;
+  t.gladys.publishStates = () =>
+    new Promise((resolve, reject) => {
+      refuse = reject;
+    });
+  at += 15 * MINUTE;
+  await t.wait(15 * MINUTE);
+  assert.ok(refuse, 'the new value is being sent');
+  await t.app.onDeviceDeleted({ external_id: D(POTOMAC) });
+  refuse(new Error('refused'));
+  await settle(20);
+  assert.equal(t.app.published.has(fid), false);
+  await t.app.stop();
+});
+
+test('the marks of the values published are capped at 400 (the oldest dropped)', async () => {
+  const kept = Object.fromEntries(
+    Array.from({ length: 399 }, (_, i) => [
+      `ext:ue:station:USGS-${20000000 + i}:discharge-cfs`,
+      NOW,
+    ]),
+  );
+  const store = createMemoryStore({ lastAttemptAt: NOW - HOUR, published: kept });
+  const t = await setup({
+    config: { stations: STATIONS20.join(',') },
+    world: {},
+    store,
+    devices: STATIONS20.map(fullDevice),
+  });
+  t.source.world.latest = () => latestBody(STATIONS20.flatMap((s) => allKinds(s, NOW - MINUTE)));
+  await t.begin();
+  await t.app.idle();
+  assert.equal(t.app.published.size, 400);
+  // The newest are kept: those just sent.
+  assert.ok(t.app.published.has(F(STATIONS20[19], 'discharge-cfs')));
+  await t.app.stop();
+});
+
+test('a qualifier sent as a plain string is read; nuancing codes are said, invalidating ones block', async () => {
+  const t = await setup({ config: { stations: '01646500', language: 'fr' }, world: {} });
+  t.source.world.latest = () =>
+    latestBody([
+      series({ at: NOW - MINUTE, qualifier: 'ESTIMATED', approval: 'Provisional' }),
+      series({ param: '00065', at: NOW - MINUTE, value: '3', qualifier: 'Ice' }),
+      series({ param: '00010', at: NOW - MINUTE, value: '9', qualifier: ['REVISED'] }),
+    ]);
+  await t.begin();
+  await t.create(POTOMAC);
+  assert.deepEqual(
+    t.statesOf(F(POTOMAC, 'discharge-cfs')).map((s) => s.state),
+    [100],
+  );
+  assert.deepEqual(t.statesOf(F(POTOMAC, 'gage-height-ft')), []);
+  assert.deepEqual(
+    t.statesOf(F(POTOMAC, 'status')).map((s) => s.text),
+    ['Mesuré le 30 oct., 11:44 UTC (estimée, révisée, provisoire)'],
+  );
+  await t.app.stop();
+});
+
+test('a dry well with a number: never a depth of water', async () => {
+  const t = await setup({ config: { stations: '354144078460101' }, world: {} });
+  let qualifier = null;
+  t.source.world.latest = () =>
+    latestBody([
+      series({
+        station: 'USGS-354144078460101',
+        param: '72019',
+        at: t.clock.now() - MINUTE,
+        value: '14.13',
+        qualifier,
+      }),
+    ]);
+  await t.begin();
+  await t.create('USGS-354144078460101');
+  qualifier = ['DRY', 'EQUIP'];
+  await t.wait(15 * MINUTE);
+  await t.app.idle();
+  const fid = F('USGS-354144078460101', 'groundwater-depth-ft');
+  assert.deepEqual(
+    t.statesOf(fid).map((s) => s.state),
+    [14.13],
+    'only the first, unqualified one',
+  );
+  assert.deepEqual(
+    t.statesOf(F('USGS-354144078460101', 'status')).map((s) => s.text),
+    [
+      'Measured Oct 30, 11:44 AM UTC',
+      'No value (dry, equipment malfunction), Oct 30, 11:59 AM UTC',
+    ],
   );
   await t.app.stop();
 });

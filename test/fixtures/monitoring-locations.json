@@ -28,6 +28,42 @@
     {
       "type": "Feature",
       "properties": {
+        "monitoring_location_name": "ST. CLAIR RIVER AT PORT HURON, MI",
+        "site_type": "Stream",
+        "state_name": "Michigan",
+        "time_zone_abbreviation": "EST",
+        "uses_daylight_savings": "N"
+      },
+      "id": "USGS-04159130",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_name": "White River at Georgetown, AR",
+        "site_type": "Stream",
+        "state_name": "Arkansas",
+        "time_zone_abbreviation": "CST",
+        "uses_daylight_savings": "Y"
+      },
+      "id": "USGS-07076750",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_name": "JIMMY CAMP CREEK AT FOUNTAIN, CO.",
+        "site_type": "Stream",
+        "state_name": "Colorado",
+        "time_zone_abbreviation": "MST",
+        "uses_daylight_savings": "Y"
+      },
+      "id": "USGS-07105900",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
         "monitoring_location_name": "COLORADO RIVER AT LEES FERRY, AZ",
         "site_type": "Stream",
         "state_name": "Arizona",
@@ -35,6 +71,18 @@
         "uses_daylight_savings": "N"
       },
       "id": "USGS-09380000",
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "monitoring_location_name": "TRES PINOS C NR TRES PINOS CA",
+        "site_type": "Stream",
+        "state_name": "California",
+        "time_zone_abbreviation": "PST",
+        "uses_daylight_savings": "Y"
+      },
+      "id": "USGS-11157500",
       "geometry": null
     },
     {
@@ -74,31 +122,31 @@
       "geometry": null
     }
   ],
-  "numberReturned": 6,
+  "numberReturned": 10,
   "links": [
     {
       "type": "application/geo+json",
       "rel": "self",
       "title": "This document as GeoJSON",
-      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=json&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=json&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000,USGS-07105900,USGS-11157500,USGS-07076750,USGS-04159130&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
     },
     {
       "rel": "alternate",
       "type": "application/ld+json",
       "title": "This document as RDF (JSON-LD)",
-      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=jsonld&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=jsonld&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000,USGS-07105900,USGS-11157500,USGS-07076750,USGS-04159130&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
     },
     {
       "type": "text/html",
       "rel": "alternate",
       "title": "This document as HTML",
-      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=html&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=html&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000,USGS-07105900,USGS-11157500,USGS-07076750,USGS-04159130&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
     },
     {
       "type": "text/csv; charset=utf-8",
       "rel": "alternate",
       "title": "This document as CSV",
-      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=csv&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=csv&limit=100&skipGeometry=true&id=USGS-01646500,USGS-09380000,USGS-12113000,USGS-354144078460101,USGS-405118099514901,USGS-00000000,USGS-07105900,USGS-11157500,USGS-07076750,USGS-04159130&properties=monitoring_location_name,site_type,state_name,time_zone_abbreviation,uses_daylight_savings"
     },
     {
       "type": "application/json",
@@ -107,5 +155,5 @@
       "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations"
     }
   ],
-  "timeStamp": "2026-10-30T06:05:39.609430Z"
+  "timeStamp": "2026-10-30T11:44:26.060931Z"
 }

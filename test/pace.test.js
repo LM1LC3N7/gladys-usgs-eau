@@ -250,7 +250,7 @@ test('a 429: paused as asked (Retry-After), the read armed at its end, never a r
   assert.equal(t.status().connected, false);
   assert.match(
     t.status().message.en,
-    /asked to slow down \(too many requests\): paused until Oct 30, 6:26 AM UTC/,
+    /asked to slow down \(too many requests\): paused until Oct 30, 12:05 PM UTC/,
   );
   await t.wait(20 * MINUTE - SECOND);
   assert.equal(t.source.count('latest'), 1);
@@ -988,4 +988,112 @@ test('a read whose values failed asks nothing else (no names request)', async ()
   assert.equal(t.source.count('latest'), 1);
   assert.equal(t.source.count('locations'), 0);
   await t.app.stop();
+});
+
+// --- Review r1 (I4, m2, m3, s05) ------------------------------------------------------------
+
+test('two saves at once with /data unreadable: one start after the other, one set-aside only', async () => {
+  const store = Object.assign(createMemoryStore({ v: 1 }), { broken: true });
+  let release;
+  store.holdAside = new Promise((resolve) => {
+    release = resolve;
+  });
+  const t = await paced({ store });
+  // The first start is setting the file aside (slow) when the second save comes:
+  // run alongside, the second would set aside the fresh file too.
+  const first = t.app.configUpdated({ stations: '01646500' });
+  await settle(20);
+  const second = t.app.configUpdated({ stations: '01646500 09380000' });
+  await settle(20);
+  release();
+  await kick(t);
+  await Promise.all([first, second]);
+  await t.app.idle();
+  assert.equal(store.asides, 1);
+  assert.deepEqual(t.app.config.stations, ['USGS-01646500', 'USGS-09380000']);
+  await t.app.stop();
+});
+
+test('a stop cuts the request of the read running (its signal aborted)', async () => {
+  const t = await paced();
+  t.source.world.latest = () => 'hang';
+  t.app.connected(() => t.gladys.getConfig());
+  await kick(t);
+  const request = t.source.requests.find((r) => r.route === 'latest');
+  assert.equal(request.signal.aborted, false);
+  const stopped = t.app.stop();
+  await settle(20);
+  assert.equal(request.signal.aborted, true);
+  await t.wait(10 * SECOND);
+  await stopped;
+});
+
+test('a Retry-After of 8 digits or more is a pause of 6 h, never ignored', async () => {
+  for (const value of ['12345678', '9'.repeat(30)]) {
+    const t = await paced();
+    t.source.world.latest = () => json({}, { status: 429, headers: { 'retry-after': value } });
+    await t.begin();
+    await t.wait(6 * HOUR - SECOND);
+    assert.equal(t.source.count('latest'), 1, value);
+    await t.wait(2 * SECOND);
+    assert.equal(t.source.count('latest'), 2, value);
+    await t.app.stop();
+  }
+});
+
+test('a 5xx pause says the USGS is unavailable, not that it asked to slow down', async () => {
+  const t = await paced();
+  t.source.world.latest = () => json({}, { status: 503 });
+  await t.begin();
+  assert.match(
+    t.status().message.en,
+    /^The USGS is unavailable \(service unavailable \(HTTP 503\)\): reads paused until/,
+  );
+  assert.match(t.status().message.fr, /^L'USGS est indisponible/);
+  assert.doesNotMatch(t.status().message.en, /slow down/);
+  await t.app.stop();
+});
+
+test('a date of the last read negative or zero in /data is invalid: the first read one interval later', async () => {
+  for (const lastAttemptAt of [-5, 0, null]) {
+    const t = await paced({ store: createMemoryStore({ lastAttemptAt }) });
+    await t.begin();
+    await t.wait(15 * MINUTE - 2 * SECOND);
+    assert.equal(t.source.count('latest'), 0, String(lastAttemptAt));
+    await t.wait(3 * SECOND);
+    assert.equal(t.source.count('latest'), 1, String(lastAttemptAt));
+    await t.app.stop();
+  }
+});
+
+test('a stop signal: the process exits 15 s after it at the latest, even with /data frozen', async () => {
+  const { testClock } = await import('./helpers/clock.js');
+  const { createFakeGladys } = await import('@gladysassistant/integration-sdk/testing');
+  const { WaterApp } = await import('../src/app.js');
+  const { wire } = await import('../src/wire.js');
+  const clock = testClock({ start: NOW });
+  const gladys = createFakeGladys({ selector: 'ue', config: { stations: '01646500' } });
+  await gladys.connect();
+  const store = createMemoryStore();
+  const app = new WaterApp({
+    gladys,
+    now: clock.now,
+    monotonic: clock.monotonic,
+    timers: clock.timers,
+    store,
+    fetchImpl: async () => new Response('{}', { status: 503 }),
+    base: 'https://usgs.test/ogcapi/v1',
+  });
+  const exits = [];
+  const logger = { info() {}, warn() {}, error() {} };
+  wire(gladys, app, logger, { exit: (code) => exits.push(code), timers: clock.timers });
+  // A stop that never ends (as a write to a FIFO in /data would).
+  app.stop = () => new Promise(() => {});
+  const shutdown = gladys.fake.shutdown('SIGTERM');
+  await settle(10);
+  await clock.advance(15 * SECOND - 10);
+  assert.deepEqual(exits, []);
+  await clock.advance(20);
+  assert.deepEqual(exits, [0]);
+  void shutdown;
 });

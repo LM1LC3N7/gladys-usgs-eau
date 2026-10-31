@@ -28,8 +28,9 @@ Reports are welcome.
 - A measurement is published once (deduplicated on its time, kept in /data),
   only while younger than the maximum age of the form (3 h by default, against
   the `Date` of the answer), without `created_at`. A value the USGS does not
-  give (dry, ice, equipment), unreadable or stale is never a number: the status
-  text says it.
+  give, or gives with a code that invalidates it (dry, ice, equipment, below
+  the minimum...), unreadable or stale is never published: the status text
+  says it; a code that only nuances it (estimated, revised...) is said there.
 - 429: every request paused (5 min doubled, `Retry-After`, 60 s to 6 h, kept
   across restarts), the next read at the end of the pause. A 5xx of the values
   pauses the reads only; a 5xx of the names or of a search pauses nothing.

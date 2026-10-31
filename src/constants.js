@@ -4,7 +4,12 @@
 // rename one.
 // -----------------------------------------------------------------------------
 
-export const VERSION = '0.1.0';
+import { readFileSync } from 'node:fs';
+
+/** The version of the package (the release bumps it): the User-Agent follows. */
+export const VERSION = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+).version;
 /** Honest User-Agent, in the name of the integration (never a browser's). */
 export const USER_AGENT = `gladys-usgs-eau/${VERSION} (+https://github.com/LM1LC3N7/gladys-usgs-eau)`;
 
@@ -42,6 +47,8 @@ export const PARAMETERS = {
   '00065': 'gage-height',
   '00010': 'water-temperature',
   72019: 'groundwater-depth',
+  // Discharge in m³/s, the only discharge of a few stations (5 current on 2026-10-30).
+  30208: 'discharge',
 };
 /** The statistic of an instantaneous value (some series give none). */
 export const INSTANTANEOUS = '00011';
@@ -99,6 +106,8 @@ export const SEARCH_SHOWN = 15;
 
 /** A save or a load of /data is awaited this long at most (a frozen /data never holds anything back). */
 export const SAVE_WAIT = 5 * SECOND;
+/** After a stop signal, the process exits this long after it at the latest. */
+export const SHUTDOWN_LIMIT = 15 * SECOND;
 /** A clean stop waits this long, at most, for the read running. */
 export const STOP_WAIT = 3 * SECOND;
 /** Dates of the last values published kept in /data, at most. */
