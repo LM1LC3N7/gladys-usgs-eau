@@ -1,6 +1,6 @@
 {
   "name": "gladys-usgs-eau",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "U.S. river and groundwater levels for Gladys Assistant, from the open data of the USGS (Water Data OGC APIs): discharge, gage height, water temperature and depth to groundwater at the stations you choose. Read-only, unofficial.",
   "type": "module",

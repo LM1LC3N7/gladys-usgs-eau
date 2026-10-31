@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-31
+
 ### Added
 
 - First version: the latest values of the USGS monitoring stations of the
@@ -37,3 +39,6 @@ the notes of the version's GitHub Release.
   is only read and written as a regular file, never waited on (a FIFO or a
   link in its place is unreadable or not writable); the status names each kind
   once ("discharge: provisional, estimated").
+
+[Unreleased]: https://github.com/LM1LC3N7/gladys-usgs-eau/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-usgs-eau/releases/tag/v0.1.1
